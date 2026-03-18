@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/user.model.js";
+import { getCachedUser } from "../services/auth.service.js";
 
 export const isAuthenticated = async (req, res, next) => {
     try {
@@ -30,7 +30,8 @@ export const isAuthenticated = async (req, res, next) => {
             });
         }
 
-        const user = await User.findById(decoded.id).select("-password");
+        // Try Redis cache first — falls back to DB on cache miss
+        const user = await getCachedUser(decoded.id);
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -39,7 +40,7 @@ export const isAuthenticated = async (req, res, next) => {
         }
 
         req.user = user;
-        req.userId = user._id;
+        req.userId = decoded.id;
         next();
     } catch (error) {
         return res.status(500).json({

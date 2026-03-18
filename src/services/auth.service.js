@@ -1,28 +1,23 @@
 import jwt from "jsonwebtoken";
 import User from "../models/user.model.js";
-import Session from "../models/session.model.js";
 import { verifyMail } from "../email/verifyMail.js";
 import { sendOtpMail } from "../email/sendOtpMail.js";
+import redis, { keys, TTL } from "../lib/redis.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Creates a structured error with an HTTP status code attached.
- */
 const createError = (statusCode, message) => {
     const err = new Error(message);
     err.statusCode = statusCode;
     return err;
 };
 
-/**
- * Generates access + refresh JWT tokens for a given userId.
- */
-export const generateTokens = (userId) => {
-    const accessToken = jwt.sign({ id: userId }, process.env.ACCESS_SECRET, {
+const generateTokens = (userId) => {
+    const id = userId.toString();
+    const accessToken = jwt.sign({ id }, process.env.ACCESS_SECRET, {
         expiresIn: "10d",
     });
-    const refreshToken = jwt.sign({ id: userId }, process.env.REFRESH_SECRET, {
+    const refreshToken = jwt.sign({ id }, process.env.REFRESH_SECRET, {
         expiresIn: "30d",
     });
     return { accessToken, refreshToken };
@@ -41,13 +36,18 @@ export const registerService = async ({ username, email, password }) => {
 
     // Generate a short-lived verification token (separate secret)
     const verificationToken = jwt.sign(
-        { id: newUser._id },
+        { id: newUser._id.toString() },
         process.env.VERIFY_SECRET,
         { expiresIn: "10m" }
     );
 
-    // Use findByIdAndUpdate to avoid re-triggering the password pre-save hook
-    await User.findByIdAndUpdate(newUser._id, { token: verificationToken });
+    // Store verification token in Redis — no DB write needed, avoids double-hash bug
+    await redis.set(
+        keys.verifyToken(newUser._id.toString()),
+        verificationToken,
+        "EX",
+        TTL.VERIFY
+    );
 
     // Non-blocking — don't fail registration if mail fails
     verifyMail(verificationToken, email).catch((err) =>
@@ -75,7 +75,15 @@ export const verifyEmailService = async (token) => {
         throw createError(400, "Token verification failed");
     }
 
-    const user = await User.findById(decoded.id);
+    const userId = decoded.id;
+
+    // Check token exists in Redis (prevents token reuse after verification)
+    const storedToken = await redis.get(keys.verifyToken(userId));
+    if (!storedToken || storedToken !== token) {
+        throw createError(400, "Verification token is invalid or already used");
+    }
+
+    const user = await User.findById(userId);
     if (!user) {
         throw createError(404, "User not found");
     }
@@ -84,9 +92,11 @@ export const verifyEmailService = async (token) => {
         throw createError(400, "Email is already verified");
     }
 
-    user.token = null;
     user.isVerified = true;
     await user.save();
+
+    // Delete token from Redis — can't be reused
+    await redis.del(keys.verifyToken(userId));
 };
 
 // ─── Login ───────────────────────────────────────────────────────────────────
@@ -106,33 +116,44 @@ export const loginService = async ({ email, password }) => {
         throw createError(403, "Please verify your email before logging in");
     }
 
-    // Replace any existing session
-    await Session.deleteMany({ userId: user._id });
-    await Session.create({ userId: user._id });
-
     const { accessToken, refreshToken } = generateTokens(user._id);
 
-    user.isLoggedIn = true;
-    await user.save();
-
-    return {
-        accessToken,
+    // Store refresh token in Redis with 30-day TTL (replaces Session model)
+    await redis.set(
+        keys.refreshToken(user._id.toString()),
         refreshToken,
-        user: {
-            _id: user._id,
-            username: user.username,
-            email: user.email,
-            role: user.role,
-            isVerified: user.isVerified,
-        },
+        "EX",
+        TTL.REFRESH
+    );
+
+    // Cache user profile in Redis to avoid DB hit on every authenticated request
+    const userPayload = {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified,
     };
+    await redis.set(
+        keys.userCache(user._id.toString()),
+        JSON.stringify(userPayload),
+        "EX",
+        TTL.USER_CACHE
+    );
+
+    return { accessToken, refreshToken, user: userPayload };
 };
 
 // ─── Logout ──────────────────────────────────────────────────────────────────
 
 export const logoutService = async (userId) => {
-    await Session.deleteMany({ userId });
-    await User.findByIdAndUpdate(userId, { isLoggedIn: false });
+    const id = userId.toString();
+
+    // Delete refresh token and user cache from Redis
+    await redis.del(keys.refreshToken(id));
+    await redis.del(keys.userCache(id));
+
+    // No DB write needed — Redis handles session state
 };
 
 // ─── Refresh Token ───────────────────────────────────────────────────────────
@@ -148,18 +169,52 @@ export const refreshTokenService = async (token) => {
         throw createError(401, "Invalid refresh token");
     }
 
-    const session = await Session.findOne({ userId: decoded.id });
-    if (!session) {
-        throw createError(401, "Session not found. Please log in again.");
+    const userId = decoded.id;
+
+    // Validate token against what's stored in Redis
+    const storedToken = await redis.get(keys.refreshToken(userId));
+    if (!storedToken || storedToken !== token) {
+        throw createError(401, "Refresh token is invalid or session has expired. Please log in again.");
     }
 
     const accessToken = jwt.sign(
-        { id: decoded.id },
+        { id: userId },
         process.env.ACCESS_SECRET,
         { expiresIn: "10d" }
     );
 
     return { accessToken };
+};
+
+// ─── Get Cached User (used by middleware) ────────────────────────────────────
+
+export const getCachedUser = async (userId) => {
+    const id = userId.toString();
+    const cached = await redis.get(keys.userCache(id));
+    if (cached) {
+        return JSON.parse(cached);
+    }
+
+    // Cache miss — fetch from DB and re-cache
+    const user = await User.findById(id).select("-password");
+    if (!user) return null;
+
+    const userPayload = {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified,
+    };
+
+    await redis.set(
+        keys.userCache(id),
+        JSON.stringify(userPayload),
+        "EX",
+        TTL.USER_CACHE
+    );
+
+    return userPayload;
 };
 
 // ─── Forgot Password ─────────────────────────────────────────────────────────
@@ -171,17 +226,15 @@ export const forgotPasswordService = async (email) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    user.otp = otp;
-    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-    await user.save();
+
+    // Store OTP in Redis with 10-minute TTL
+    await redis.set(keys.otp(email), otp, "EX", TTL.OTP);
 
     try {
         await sendOtpMail(email, otp);
     } catch (mailErr) {
-        // Roll back OTP if email fails so user can retry cleanly
-        user.otp = null;
-        user.otpExpiry = null;
-        await user.save();
+        // Roll back: delete OTP from Redis so user can retry cleanly
+        await redis.del(keys.otp(email));
         throw createError(500, "Failed to send OTP email. Please try again.");
     }
 };
@@ -194,30 +247,22 @@ export const verifyOTPService = async (email, otp) => {
         throw createError(404, "User not found");
     }
 
-    if (!user.otp || !user.otpExpiry) {
+    const storedOtp = await redis.get(keys.otp(email));
+    if (!storedOtp) {
         throw createError(400, "OTP not generated or already used");
     }
 
-    if (user.otpExpiry < new Date()) {
-        throw createError(400, "OTP has expired. Please request a new one.");
-    }
-
-    if (otp !== user.otp) {
+    if (otp !== storedOtp) {
         throw createError(400, "Invalid OTP");
     }
 
-    user.otp = null;
-    user.otpExpiry = null;
-    await user.save();
+    // Delete immediately — single use only
+    await redis.del(keys.otp(email));
 };
 
 // ─── Change Password ─────────────────────────────────────────────────────────
 
-export const changePasswordService = async (email, { newPassword, confirmPassword }) => {
-    if (newPassword !== confirmPassword) {
-        throw createError(400, "Passwords do not match");
-    }
-
+export const changePasswordService = async (email, { newPassword }) => {
     if (newPassword.length < 6) {
         throw createError(400, "Password must be at least 6 characters");
     }
@@ -230,4 +275,9 @@ export const changePasswordService = async (email, { newPassword, confirmPasswor
     // Assign plain password — pre-save hook will hash it
     user.password = newPassword;
     await user.save();
+
+    // Invalidate user cache and force re-login by deleting refresh token
+    const id = user._id.toString();
+    await redis.del(keys.userCache(id));
+    await redis.del(keys.refreshToken(id));
 };
