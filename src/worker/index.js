@@ -1,3 +1,14 @@
+// Worker service — runs as a separate process from the API gateway.
+// It listens to the RabbitMQ payout_queue and processes each payout job:
+//   1. Re-validates the transaction exists and isn't already processed
+//   2. Deducts the balance atomically in Redis
+//   3. Marks the transaction as completed in MongoDB
+//   4. Releases the distributed lock
+//   5. Publishes a WebSocket event so the user sees the result in real time
+//   6. Runs anomaly detection in the background (non-blocking)
+//
+// If anything fails, it rolls back the balance and marks the transaction as failed.
+
 import "dotenv/config";
 
 import database from "../config/database.js";
@@ -26,6 +37,8 @@ class WorkerService {
         this.stopping = false;
     }
 
+    // Connect to all dependencies before starting to consume messages.
+    // If any connection fails, the worker exits — better to fail fast than process with broken deps.
     async initialize() {
         logger.info("Starting worker service...");
 
@@ -36,6 +49,7 @@ class WorkerService {
 
         await rabbitmq.connect();
 
+        // Wire up services with the shared Redis client
         this.balance = new BalanceService(this.redis);
         this.lock    = new DistributedLock(this.redis);
         this.groq    = new GroqClient();
@@ -43,6 +57,8 @@ class WorkerService {
         logger.info("Worker service initialized");
     }
 
+    // Process a single payout message from the queue.
+    // This is called by MessageConsumer for each message it receives.
     async processMessage(payload) {
         const startTime = new Date();
         const { transactionId, userId, amount, currency, lockValue } = payload;
@@ -50,11 +66,13 @@ class WorkerService {
         let transaction = null;
 
         try {
+            // Load the transaction record — it was created by the API gateway before publishing
             transaction = await Transaction.findByTransactionId(transactionId);
 
             if (!transaction) throw new Error("TRANSACTION_NOT_FOUND");
 
-            // Idempotency guard — if the message was delivered twice, skip it
+            // Idempotency guard — if the message was delivered twice (RabbitMQ can do this),
+            // skip it silently instead of double-processing
             if (transaction.status === "completed") {
                 logger.warn("Transaction already completed — skipping", { transactionId });
                 return;
@@ -64,11 +82,12 @@ class WorkerService {
                 throw new Error("ALREADY_PROCESSING");
             }
 
+            // Mark as processing so concurrent workers don't pick it up
             await transaction.markAsProcessing();
             await AuditLog.logAction(transactionId, userId, "PAYOUT_PROCESSING", { status: "processing" });
             await this._publishWsEvent(userId, "PAYOUT_PROCESSING", { transactionId, amount, currency });
 
-            // Re-check balance in Redis before deducting — the lock ensures no one else is here
+            // Re-check balance in Redis — the distributed lock ensures no one else is here
             const currentBalance = await this.balance.getBalance(userId);
             if (currentBalance === null) throw new Error("BALANCE_NOT_FOUND");
             if (currentBalance < amount)  throw new Error("INSUFFICIENT_BALANCE");
@@ -82,6 +101,7 @@ class WorkerService {
                 amount,
             });
 
+            // Update the transaction record with the new balance
             transaction.balanceAfter = newBalance;
             await transaction.markAsCompleted();
 
@@ -89,21 +109,23 @@ class WorkerService {
             await PayoutUser.updateOne(
                 { userId },
                 {
-                    $set:          { balance: newBalance },
-                    $inc:          { "metadata.totalPayouts": 1, "metadata.totalPayoutAmount": amount },
-                    $currentDate:  { "metadata.lastPayoutAt": true },
+                    $set:         { balance: newBalance },
+                    $inc:         { "metadata.totalPayouts": 1, "metadata.totalPayoutAmount": amount },
+                    $currentDate: { "metadata.lastPayoutAt": true },
                 }
             );
 
-            // Release the distributed lock
+            // Release the distributed lock so the user can make another payout
             if (lockValue) {
                 await this.lock.release(userId, lockValue);
             } else {
+                // Fallback: force-delete the lock key if we don't have the lock value
                 await this.redis.del(`lock:${userId}`);
             }
 
             await AuditLog.logAction(transactionId, userId, "LOCK_RELEASED", { success: true });
 
+            // Notify the user via WebSocket that their payout completed
             await this._publishWsEvent(userId, "PAYOUT_COMPLETED", { transactionId, amount, currency, newBalance });
 
             await AuditLog.logAction(transactionId, userId, "PAYOUT_COMPLETED", {
@@ -112,7 +134,7 @@ class WorkerService {
                 processingTimeMs: calculateDuration(startTime),
             });
 
-            // Post-completion anomaly detection (non-blocking)
+            // Run anomaly detection in the background — don't await it so it doesn't slow down the response
             this._detectAnomaly(transaction, userId).catch((err) =>
                 logger.error("Anomaly detection error:", err.message)
             );
@@ -131,7 +153,8 @@ class WorkerService {
                 processingTimeMs: calculateDuration(startTime),
             });
 
-            // Roll back balance for unexpected errors (not for logic errors like insufficient funds)
+            // Roll back the balance for unexpected errors.
+            // Don't roll back for logic errors like "insufficient balance" — there's nothing to undo.
             const nonRollbackErrors = new Set(["TRANSACTION_NOT_FOUND", "ALREADY_PROCESSING", "INSUFFICIENT_BALANCE"]);
             if (!nonRollbackErrors.has(error.message)) {
                 try {
@@ -145,16 +168,20 @@ class WorkerService {
 
             if (transaction) await transaction.markAsFailed(error);
 
+            // Notify the user that their payout failed
             await this._publishWsEvent(userId, "PAYOUT_FAILED", { transactionId, amount, currency, error: error.message });
             await AuditLog.logAction(transactionId, userId, "PAYOUT_FAILED", {
                 error:            error.message,
                 processingTimeMs: calculateDuration(startTime),
             });
 
+            // Re-throw so MessageConsumer knows to retry or dead-letter the message
             throw error;
         }
     }
 
+    // Publish a WebSocket event via Redis pub/sub.
+    // The API gateway subscribes to this channel and forwards events to connected clients.
     async _publishWsEvent(userId, event, data) {
         try {
             await this.redis.publish(
@@ -162,10 +189,14 @@ class WorkerService {
                 JSON.stringify({ userId, event, data, timestamp: new Date().toISOString() })
             );
         } catch (error) {
+            // Non-critical — don't fail the payout if the WebSocket event fails
             logger.error("Failed to publish WebSocket event", { userId, event, error: error.message });
         }
     }
 
+    // Run AI anomaly detection on a completed transaction.
+    // Compares the transaction against the user's last 100 transactions from the past 30 days.
+    // Logs an audit event if the AI flags it as unusual.
     async _detectAnomaly(transaction, userId) {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -173,13 +204,14 @@ class WorkerService {
             userId,
             status:    "completed",
             createdAt: { $gte: thirtyDaysAgo },
-            _id:       { $ne: transaction._id },
+            _id:       { $ne: transaction._id },  // Exclude the current transaction
         })
             .select("amount currency createdAt")
             .sort({ createdAt: -1 })
             .limit(100)
             .lean();
 
+        // Can't detect anomalies without any history
         if (history.length === 0) return;
 
         const result = await this.groq.detectAnomaly(
@@ -203,6 +235,7 @@ class WorkerService {
         }
     }
 
+    // Start consuming messages from the queue.
     async start() {
         this.consumer = new MessageConsumer(
             rabbitmq.getChannel(),
@@ -216,15 +249,17 @@ class WorkerService {
         });
     }
 
+    // Graceful shutdown — stop consuming, wait for in-flight messages, then disconnect.
     async shutdown() {
         if (this.stopping) return;
         this.stopping = true;
 
         logger.info("Worker shutting down...");
 
+        // Stop accepting new messages
         if (this.consumer) await this.consumer.stopConsuming();
 
-        // Allow in-flight messages to finish
+        // Give in-flight messages 5 seconds to finish processing
         await new Promise((r) => setTimeout(r, 5000));
 
         await rabbitmq.disconnect();
@@ -238,6 +273,7 @@ class WorkerService {
 
 const worker = new WorkerService();
 
+// Start the worker
 (async () => {
     try {
         await worker.initialize();
@@ -248,9 +284,11 @@ const worker = new WorkerService();
     }
 })();
 
+// Handle Docker stop and Ctrl+C gracefully
 process.on("SIGTERM", () => worker.shutdown());
 process.on("SIGINT",  () => worker.shutdown());
 
+// These two should never fire in production — if they do, something is seriously wrong
 process.on("uncaughtException", (error) => {
     logger.error("Uncaught exception in worker:", error);
     worker.shutdown();

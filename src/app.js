@@ -159,12 +159,17 @@ class Application {
                     currencyValidation: process.env.ENABLE_CURRENCY_VALIDATION === "true",
                 },
                 publicApis: {
-                    exchangeRates: "/api/public/rates",
-                    convert:       "/api/public/convert",
-                    countries:     "/api/public/countries",
-                    country:       "/api/public/country/:code",
-                    crypto:        "/api/public/crypto",
-                    cryptoConvert: "/api/public/crypto/convert",
+                    exchangeRates:       "/api/public/rates",
+                    convert:             "/api/public/convert",
+                    historicalRates:     "/api/public/rates/historical",
+                    historicalRange:     "/api/public/rates/historical/range",
+                    countries:           "/api/public/countries",
+                    country:             "/api/public/country/:code",
+                    vatRates:            "/api/public/vat",
+                    crypto:              "/api/public/crypto",
+                    cryptoConvert:       "/api/public/crypto/convert",
+                    cardBinLookup:       "/api/public/bin/:bin",
+                    postcodeLookup:      "/api/public/postcode/:country/:postcode",
                 },
             });
         });
@@ -183,9 +188,10 @@ class Application {
         // We use a dedicated subscriber connection — never share the main client for pub/sub.
         const subscriber = this.redis.duplicate();
 
-        subscriber.subscribe("websocket:events", (err) => {
-            if (err) logger.error("WebSocket bridge subscribe failed:", err.message);
-            else     logger.info("WebSocket bridge subscribed to Redis channel");
+        subscriber.subscribe("websocket:events").then(() => {
+            logger.info("WebSocket bridge subscribed to Redis channel");
+        }).catch((err) => {
+            logger.error("WebSocket bridge subscribe failed:", err.message);
         });
 
         subscriber.on("message", (_channel, raw) => {

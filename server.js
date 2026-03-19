@@ -1,3 +1,7 @@
+// Entry point for the API gateway process.
+// Loads environment variables, initializes the app, and starts the HTTP server.
+// Handles graceful shutdown on SIGTERM/SIGINT so in-flight requests can finish.
+
 // Load environment variables first — everything else depends on them
 import "dotenv/config";
 import Application from "./src/app.js";
@@ -11,6 +15,8 @@ let app = null;
 async function start() {
     try {
         app = new Application();
+
+        // Connect to MongoDB, Redis, RabbitMQ, and set up all routes
         await app.initialize();
 
         app.getServer().listen(PORT, () => {
@@ -25,6 +31,8 @@ async function start() {
     }
 }
 
+// Graceful shutdown — close connections cleanly instead of killing the process abruptly.
+// This gives in-flight requests time to complete and prevents data corruption.
 async function shutdown(signal) {
     logger.info(`${signal} received — shutting down gracefully`);
     try {
@@ -36,11 +44,12 @@ async function shutdown(signal) {
     }
 }
 
-// Handle Docker stop / Ctrl+C
+// Handle Docker stop (SIGTERM) and Ctrl+C (SIGINT)
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 
-// These two should never fire in production — if they do, something is seriously wrong
+// These two should never fire in a healthy app.
+// If they do, log the error and shut down cleanly rather than leaving the process in a broken state.
 process.on("uncaughtException", (error) => {
     logger.error("Uncaught exception:", error);
     shutdown("uncaughtException");

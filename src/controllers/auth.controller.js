@@ -1,3 +1,7 @@
+// Auth controller — handles all HTTP requests for user authentication.
+// Each function here is thin: validate the request, call the service, format the response.
+// All the real logic lives in auth.service.js.
+
 import {
     registerService,
     verifyEmailService,
@@ -9,29 +13,23 @@ import {
     changePasswordService,
 } from "../services/auth.service.js";
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
-
-/**
- * Extracts Bearer token from Authorization header.
- * Returns null if missing or malformed.
- */
+// Pull the Bearer token out of the Authorization header.
+// Returns null if the header is missing or not in "Bearer <token>" format.
 const extractBearerToken = (req) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
     return authHeader.split(" ")[1];
 };
 
-/**
- * Sends a consistent error response.
- * Uses err.statusCode if set by the service layer, otherwise 500.
- */
+// Send a consistent error response.
+// The service layer sets err.statusCode on known errors — we use 500 as a fallback.
 const handleError = (res, err) => {
     const status = err.statusCode || 500;
     return res.status(status).json({ success: false, message: err.message });
 };
 
-// ─── Register ────────────────────────────────────────────────────────────────
-
+// POST /api/auth/register
+// Creates a new user account and sends a verification email.
 export const registerUser = async (req, res) => {
     try {
         const data = await registerService(req.body);
@@ -45,8 +43,8 @@ export const registerUser = async (req, res) => {
     }
 };
 
-// ─── Email Verification ──────────────────────────────────────────────────────
-
+// GET /api/auth/verify-email
+// The user clicks a link in their email — the token is in the Authorization header.
 export const verifyEmail = async (req, res) => {
     try {
         const token = extractBearerToken(req);
@@ -67,8 +65,8 @@ export const verifyEmail = async (req, res) => {
     }
 };
 
-// ─── Login ───────────────────────────────────────────────────────────────────
-
+// POST /api/auth/login
+// Returns an access token and a refresh token on success.
 export const loginUser = async (req, res) => {
     try {
         const { accessToken, refreshToken, user } = await loginService(req.body);
@@ -84,8 +82,8 @@ export const loginUser = async (req, res) => {
     }
 };
 
-// ─── Logout ──────────────────────────────────────────────────────────────────
-
+// POST /api/auth/logout
+// Invalidates the user's refresh token in Redis so it can't be used again.
 export const logoutUser = async (req, res) => {
     try {
         await logoutService(req.userId);
@@ -98,8 +96,9 @@ export const logoutUser = async (req, res) => {
     }
 };
 
-// ─── Refresh Token ───────────────────────────────────────────────────────────
-
+// POST /api/auth/refresh-token
+// Exchange a valid refresh token for a new access token.
+// The refresh token must be in the Authorization header.
 export const refreshAccessToken = async (req, res) => {
     try {
         const token = extractBearerToken(req);
@@ -120,8 +119,9 @@ export const refreshAccessToken = async (req, res) => {
     }
 };
 
-// ─── Get Profile ─────────────────────────────────────────────────────────────
-
+// GET /api/auth/profile
+// Returns the currently logged-in user's profile.
+// req.user is set by the isAuthenticated middleware before this runs.
 export const getProfile = async (req, res) => {
     try {
         return res.status(200).json({ success: true, user: req.user });
@@ -130,8 +130,8 @@ export const getProfile = async (req, res) => {
     }
 };
 
-// ─── Forgot Password ─────────────────────────────────────────────────────────
-
+// POST /api/auth/forgot-password
+// Sends a 6-digit OTP to the user's email address.
 export const forgotPassword = async (req, res) => {
     try {
         await forgotPasswordService(req.body.email);
@@ -144,8 +144,8 @@ export const forgotPassword = async (req, res) => {
     }
 };
 
-// ─── Verify OTP ──────────────────────────────────────────────────────────────
-
+// POST /api/auth/verify-otp/:email
+// Checks the OTP the user entered against what we stored in Redis.
 export const verifyOTP = async (req, res) => {
     try {
         const { email } = req.params;
@@ -161,8 +161,8 @@ export const verifyOTP = async (req, res) => {
     }
 };
 
-// ─── Change Password ─────────────────────────────────────────────────────────
-
+// POST /api/auth/change-password/:email
+// Sets a new password after the user has verified their OTP.
 export const changePassword = async (req, res) => {
     try {
         const { email } = req.params;

@@ -1,3 +1,7 @@
+// Auth routes — all endpoints for user registration, login, and account management.
+// Public routes are open to anyone.
+// Protected routes require a valid JWT access token (isAuthenticated middleware).
+
 import express from "express";
 import {
     registerUser,
@@ -30,16 +34,19 @@ import {
 
 const router = express.Router();
 
-// Public routes
-router.post("/register",             registerLimiter,       validate(registerSchema),       registerUser);
-router.get("/verify-email",                                                                 verifyEmail);
-router.post("/login",                loginLimiter,          validate(loginSchema),           loginUser);
-router.post("/forgot-password",      forgotPasswordLimiter, validate(forgotPasswordSchema), forgotPassword);
-router.post("/verify-otp/:email",    verifyOtpLimiter,      validate(verifyOtpSchema),      verifyOTP);
-router.post("/change-password/:email", changePasswordLimiter, validate(changePasswordSchema), changePassword);
-router.post("/refresh-token",        refreshTokenLimiter,                                   refreshAccessToken);
+// ── Public routes (no auth required) ─────────────────────────────────────────
 
-// Protected routes
+// Rate limiter → input validation → controller
+router.post("/register",               registerLimiter,       validate(registerSchema),       registerUser);
+router.get("/verify-email",                                                                    verifyEmail);
+router.post("/login",                  loginLimiter,          validate(loginSchema),           loginUser);
+router.post("/forgot-password",        forgotPasswordLimiter, validate(forgotPasswordSchema), forgotPassword);
+router.post("/verify-otp/:email",      verifyOtpLimiter,      validate(verifyOtpSchema),      verifyOTP);
+router.post("/change-password/:email", changePasswordLimiter, validate(changePasswordSchema), changePassword);
+router.post("/refresh-token",          refreshTokenLimiter,                                    refreshAccessToken);
+
+// ── Protected routes (valid JWT required) ────────────────────────────────────
+
 router.post("/logout",  isAuthenticated, logoutUser);
 router.get("/profile",  isAuthenticated, getProfile);
 

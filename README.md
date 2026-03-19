@@ -96,8 +96,17 @@ This starts MongoDB, Redis, RabbitMQ, the API gateway, and the worker.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Basic health check |
+| GET | `/api/health/live` | Liveness probe |
 | GET | `/api/health/ready` | Readiness check (all deps) |
 | GET | `/api/health/detailed` | Detailed dependency status |
+
+### AI / Validation
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/ai/usage` | API usage counters (ipapi, exchangerate, groq) |
+| GET | `/api/ai/currencies` | List of supported currencies |
+| GET | `/api/ai/validate/currency?currency=EUR&amount=100` | Validate currency + get exchange rate |
+| GET | `/api/ai/validate/ip?ip=8.8.8.8` | Geolocate an IP address |
 
 ### Public APIs (no auth required)
 
@@ -107,10 +116,15 @@ All powered by free public APIs — no API keys needed. Results are cached in Re
 |--------|------|-------------|--------|
 | GET | `/api/public/rates?base=USD` | Live exchange rates for all currencies | open.er-api.com |
 | GET | `/api/public/convert?amount=100&from=USD&to=EUR` | Convert between currencies | open.er-api.com |
+| GET | `/api/public/rates/historical?date=2024-01-15&base=USD` | Exchange rates for a specific past date | frankfurter.app |
+| GET | `/api/public/rates/historical/range?start=2024-01-01&end=2024-01-31&base=USD` | Exchange rates over a date range (max 365 days) | frankfurter.app |
 | GET | `/api/public/countries` | List all countries with currency codes | restcountries.com |
 | GET | `/api/public/country/:code` | Country info (name, currencies, flag, calling code) | restcountries.com |
-| GET | `/api/public/crypto?coins=bitcoin,ethereum` | Live crypto prices in USD | coingecko.com |
-| GET | `/api/public/crypto/convert?amount=500&coin=bitcoin` | Convert USD to crypto | coingecko.com |
+| GET | `/api/public/vat?country=DE` | VAT rates for EU countries | vatcomply.com |
+| GET | `/api/public/crypto?coins=bitcoin,ethereum` | Live crypto prices in USD (CoinGecko, falls back to CoinCap) | coingecko.com / coincap.io |
+| GET | `/api/public/crypto/convert?amount=500&coin=bitcoin` | Convert USD to crypto | coingecko.com / coincap.io |
+| GET | `/api/public/bin/:bin` | Card BIN lookup — issuer, card type, country (first 6-8 digits) | binlist.net |
+| GET | `/api/public/postcode/:country/:postcode` | Postcode/ZIP lookup — city, state, coordinates | zippopotam.us |
 
 ---
 

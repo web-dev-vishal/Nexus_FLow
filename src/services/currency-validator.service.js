@@ -1,8 +1,15 @@
+// Currency Validator — checks that a currency code is valid and gets its exchange rate.
+// Exchange rates are cached in Redis for 1 hour to avoid burning through the free API limit.
+// If the API is unavailable, we fall back to hardcoded rates so payouts still work.
+
 import logger from "../utils/logger.js";
 
-const CACHE_TTL = 60 * 60; // 1 hour
+// Cache exchange rates for 1 hour — rates don't change that fast
+const CACHE_TTL = 60 * 60;
 
-// Fallback rates relative to USD — used when the API is unavailable
+// Hardcoded fallback rates relative to USD.
+// These are used when the exchange rate API is down or the API key is missing.
+// They're not perfectly accurate but good enough to keep the system running.
 const FALLBACK_RATES = {
     USD: 1.0,   EUR: 0.92,  GBP: 0.79,  INR: 83.12, CAD: 1.36,
     AUD: 1.52,  JPY: 149.5, CHF: 0.88,  CNY: 7.24,  MXN: 17.08,
@@ -13,11 +20,19 @@ const FALLBACK_RATES = {
 class CurrencyValidator {
     constructor(redisClient) {
         this.redis = redisClient;
+
+        // Optional API key for live exchange rates — falls back to hardcoded rates if missing
         this.apiKey = process.env.EXCHANGE_RATE_API_KEY;
+
+        // Currency validation can be turned off via env var
         this.enabled = process.env.ENABLE_CURRENCY_VALIDATION === "true";
     }
 
+    // Check if a currency code is valid and return its exchange rate vs USD.
+    // Returns { valid: true, exchangeRate, amountInUSD } on success.
+    // Returns { valid: false, error, message } if the currency isn't supported.
     async validateCurrency(currency, amount) {
+        // If validation is disabled, skip the check entirely
         if (!this.enabled) {
             return { valid: true, exchangeRate: null, amountInUSD: null, cached: false };
         }
@@ -28,6 +43,8 @@ class CurrencyValidator {
 
         try {
             const cacheKey = `cache:currency:${currency}`;
+
+            // Check Redis cache first — saves an API call if we've seen this currency recently
             const cached = await this.redis.get(cacheKey);
 
             if (cached) {
@@ -35,17 +52,20 @@ class CurrencyValidator {
                 return {
                     valid:        true,
                     exchangeRate: data.rate,
+                    // Calculate how much this amount is worth in USD
                     amountInUSD:  amount ? parseFloat((amount / data.rate).toFixed(2)) : null,
                     cached:       true,
                     lastUpdated:  data.lastUpdated,
                 };
             }
 
+            // No API key — use fallback rates instead of making an API call
             if (!this.apiKey) {
                 logger.warn("Exchange rate API key not set — using fallback rates");
                 return this._fallback(currency, amount);
             }
 
+            // Abort the request if it takes more than 1.5 seconds
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 1500);
 
@@ -61,6 +81,7 @@ class CurrencyValidator {
             const data = await response.json();
             if (data.result !== "success") throw new Error(data["error-type"] || "API error");
 
+            // Check if the requested currency is in the API's response
             if (!data.conversion_rates[currency]) {
                 return {
                     valid:   false,
@@ -70,6 +91,8 @@ class CurrencyValidator {
             }
 
             const rate = data.conversion_rates[currency];
+
+            // Cache the rate so we don't hit the API again for the next hour
             await this.redis.setex(
                 cacheKey,
                 CACHE_TTL,
@@ -90,10 +113,13 @@ class CurrencyValidator {
                 logger.error("Currency validation failed", { currency, error: error.message });
             }
 
+            // Fall back to hardcoded rates so the payout can still proceed
             return this._fallback(currency, amount);
         }
     }
 
+    // Use hardcoded rates when the API is unavailable.
+    // If the currency isn't in our fallback list, we return an error.
     _fallback(currency, amount) {
         const rate = FALLBACK_RATES[currency];
 
@@ -110,11 +136,13 @@ class CurrencyValidator {
             exchangeRate: rate,
             amountInUSD:  amount ? parseFloat((amount / rate).toFixed(2)) : null,
             cached:       false,
-            fallback:     true,
+            fallback:     true,  // Let the caller know these are approximate rates
             lastUpdated:  "fallback",
         };
     }
 
+    // Returns the full list of supported currency codes.
+    // Used by the /api/ai/currencies endpoint.
     getSupportedCurrencies() {
         const currencies = [
             "USD", "EUR", "GBP", "INR", "CAD", "AUD", "JPY", "CHF", "CNY", "MXN",
