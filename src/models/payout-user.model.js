@@ -41,6 +41,27 @@ const payoutUserSchema = new mongoose.Schema(
             enum:     SUPPORTED_CURRENCIES, // must be one of the currencies we support
         },
 
+        // Multi-currency wallet — holds balances in different currencies.
+        // The main `balance` field above is always in the user's primary currency.
+        // This wallet lets users hold and pay out in multiple currencies.
+        wallet: {
+            type:    Map,
+            of:      Number,
+            default: {},
+            // Example: { "EUR": 150.00, "GBP": 80.00 }
+        },
+
+        // Contact info for notifications — optional, only used if the user provides them
+        email: {
+            type:  String,
+            trim:  true,
+        },
+
+        phone: {
+            type:  String,
+            trim:  true,
+        },
+
         // The user's country — used to detect suspicious IP locations during payouts
         country: {
             type:    String,

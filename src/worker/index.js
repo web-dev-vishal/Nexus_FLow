@@ -19,6 +19,9 @@ import DistributedLock from "../services/distributed-lock.service.js";
 import BalanceService from "../services/balance.service.js";
 import MessageConsumer from "../services/message-consumer.service.js";
 import GroqClient from "../services/groq.service.js";
+import WebhookService from "../services/webhook.service.js";
+import NotificationService from "../services/notification.service.js";
+import SpendingLimitService from "../services/spending-limit.service.js";
 
 import Transaction from "../models/transaction.model.js";
 import PayoutUser from "../models/payout-user.model.js";
@@ -34,6 +37,9 @@ class WorkerService {
         this.lock     = null;
         this.consumer = null;
         this.groq     = null;
+        this.webhooks = null;
+        this.notifications = null;
+        this.spendingLimits = null;
         this.stopping = false;
     }
 
@@ -53,6 +59,11 @@ class WorkerService {
         this.balance = new BalanceService(this.redis);
         this.lock    = new DistributedLock(this.redis);
         this.groq    = new GroqClient();
+
+        // New feature services
+        this.webhooks       = new WebhookService();
+        this.notifications  = new NotificationService();
+        this.spendingLimits = new SpendingLimitService(this.redis);
 
         logger.info("Worker service initialized");
     }
@@ -134,6 +145,24 @@ class WorkerService {
                 processingTimeMs: calculateDuration(startTime),
             });
 
+            // Fire webhook and notification in the background — don't block the worker
+            this.webhooks.deliverEvent(userId, "payout.completed", { transactionId, amount, currency, newBalance })
+                .catch((err) => logger.error("Webhook delivery error (completed):", err.message));
+
+            // Get user contact info for the notification
+            PayoutUser.findByUserId(userId).then((user) => {
+                if (user) {
+                    this.notifications.notifyPayoutCompleted(
+                        { email: user.email, phone: user.phone },
+                        { transactionId, amount, currency, newBalance }
+                    ).catch((err) => logger.error("Notification error (completed):", err.message));
+                }
+            }).catch(() => {});
+
+            // Record the spend against the user's spending limit counters
+            this.spendingLimits.recordSpend(userId, amount)
+                .catch((err) => logger.error("Spending limit record error:", err.message));
+
             // Run anomaly detection in the background — don't await it so it doesn't slow down the response
             this._detectAnomaly(transaction, userId).catch((err) =>
                 logger.error("Anomaly detection error:", err.message)
@@ -174,6 +203,19 @@ class WorkerService {
                 error:            error.message,
                 processingTimeMs: calculateDuration(startTime),
             });
+
+            // Fire webhook and notification for the failure — background, non-blocking
+            this.webhooks.deliverEvent(userId, "payout.failed", { transactionId, amount, currency, error: error.message })
+                .catch((err) => logger.error("Webhook delivery error (failed):", err.message));
+
+            PayoutUser.findByUserId(userId).then((user) => {
+                if (user) {
+                    this.notifications.notifyPayoutFailed(
+                        { email: user.email, phone: user.phone },
+                        { transactionId, amount, currency, reason: error.message }
+                    ).catch((err) => logger.error("Notification error (failed):", err.message));
+                }
+            }).catch(() => {});
 
             // Re-throw so MessageConsumer knows to retry or dead-letter the message
             throw error;

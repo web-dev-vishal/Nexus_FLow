@@ -4,29 +4,37 @@ import AuditLog from "../models/audit-log.model.js";
 import logger from "../utils/logger.js";
 import { generateTransactionId, roundAmount } from "../utils/helpers.js";
 
+// Extra error codes for the new features
+
+
 // Map internal error codes to HTTP-friendly responses.
 // Throwing a string key (e.g. throw new Error("USER_NOT_FOUND")) keeps the
 // business logic clean — the catch block handles the translation.
 const ERROR_MAP = {
-    USER_NOT_FOUND:             { code: "USER_NOT_FOUND",             message: "User not found",                                              statusCode: 404 },
-    USER_NOT_ACTIVE:            { code: "USER_NOT_ACTIVE",            message: "User account is not active",                                  statusCode: 403 },
-    INSUFFICIENT_BALANCE:       { code: "INSUFFICIENT_BALANCE",       message: "Insufficient balance for this payout",                        statusCode: 400 },
-    INVALID_CURRENCY:           { code: "INVALID_CURRENCY",           message: "Invalid or unsupported currency",                             statusCode: 400 },
-    CURRENCY_SERVICE_UNAVAILABLE: { code: "CURRENCY_SERVICE_UNAVAILABLE", message: "Currency service temporarily unavailable",               statusCode: 503 },
-    HIGH_FRAUD_RISK:            { code: "HIGH_FRAUD_RISK",            message: "Transaction flagged as high risk — requires manual review",   statusCode: 403 },
-    CONCURRENT_REQUEST_DETECTED:{ code: "CONCURRENT_REQUEST",         message: "Another payout is being processed. Please wait.",             statusCode: 409 },
-    FAILED_TO_PUBLISH_MESSAGE:  { code: "QUEUE_ERROR",                message: "Failed to queue payout request",                             statusCode: 503 },
+    USER_NOT_FOUND:               { code: "USER_NOT_FOUND",               message: "User not found",                                              statusCode: 404 },
+    USER_NOT_ACTIVE:              { code: "USER_NOT_ACTIVE",               message: "User account is not active",                                  statusCode: 403 },
+    INSUFFICIENT_BALANCE:         { code: "INSUFFICIENT_BALANCE",          message: "Insufficient balance for this payout",                        statusCode: 400 },
+    INVALID_CURRENCY:             { code: "INVALID_CURRENCY",              message: "Invalid or unsupported currency",                             statusCode: 400 },
+    CURRENCY_SERVICE_UNAVAILABLE: { code: "CURRENCY_SERVICE_UNAVAILABLE",  message: "Currency service temporarily unavailable",                    statusCode: 503 },
+    HIGH_FRAUD_RISK:              { code: "HIGH_FRAUD_RISK",               message: "Transaction flagged as high risk — requires manual review",   statusCode: 403 },
+    CONCURRENT_REQUEST_DETECTED:  { code: "CONCURRENT_REQUEST",            message: "Another payout is being processed. Please wait.",             statusCode: 409 },
+    FAILED_TO_PUBLISH_MESSAGE:    { code: "QUEUE_ERROR",                   message: "Failed to queue payout request",                             statusCode: 503 },
+    SPENDING_LIMIT_EXCEEDED:      { code: "SPENDING_LIMIT_EXCEEDED",       message: "Payout would exceed your spending limit",                     statusCode: 400 },
 };
 
 class PayoutService {
-    constructor({ balanceService, distributedLock, messagePublisher, websocketServer, ipValidator, currencyValidator, groqClient }) {
-        this.balance    = balanceService;
-        this.lock       = distributedLock;
-        this.publisher  = messagePublisher;
-        this.ws         = websocketServer;
-        this.ipValidator = ipValidator;
-        this.currencyValidator = currencyValidator;
-        this.groq       = groqClient;
+    constructor({ balanceService, distributedLock, messagePublisher, websocketServer, ipValidator, currencyValidator, groqClient, webhookService, spendingLimitService, notificationService }) {
+        this.balance             = balanceService;
+        this.lock                = distributedLock;
+        this.publisher           = messagePublisher;
+        this.ws                  = websocketServer;
+        this.ipValidator         = ipValidator;
+        this.currencyValidator   = currencyValidator;
+        this.groq                = groqClient;
+        // Optional services — only used if provided (graceful degradation)
+        this.webhooks            = webhookService || null;
+        this.spendingLimits      = spendingLimitService || null;
+        this.notifications       = notificationService || null;
     }
 
     async initiatePayout(payoutData, metadata = {}) {
@@ -73,6 +81,19 @@ class PayoutService {
 
             // Check account status after acquiring the lock — status could have changed
             if (user.status !== "active") throw new Error("USER_NOT_ACTIVE");
+
+            // Check spending limits before touching the balance
+            // This prevents the payout from going through if the user is over their cap
+            if (this.spendingLimits) {
+                const limitCheck = await this.spendingLimits.checkLimits(userId, roundedAmount);
+                if (!limitCheck.allowed) {
+                    await AuditLog.logAction(transactionId, userId, "PAYOUT_FAILED", {
+                        reason: "SPENDING_LIMIT_EXCEEDED",
+                        detail: limitCheck.reason,
+                    });
+                    throw Object.assign(new Error("SPENDING_LIMIT_EXCEEDED"), { detail: limitCheck });
+                }
+            }
 
             // Sync balance from MongoDB to Redis on first access
             let balance = await this.balance.getBalance(userId);
@@ -169,6 +190,22 @@ class PayoutService {
                 status:    "initiated",
                 timestamp: new Date().toISOString(),
             });
+
+            // Fire webhook and notification in the background — don't await them
+            // A failed webhook/notification should never block or fail the payout
+            const eventPayload = { transactionId, amount: roundedAmount, currency, userId };
+
+            if (this.webhooks) {
+                this.webhooks.deliverEvent(userId, "payout.initiated", eventPayload)
+                    .catch((err) => logger.error("Webhook delivery error (initiated):", err.message));
+            }
+
+            if (this.notifications) {
+                this.notifications.notifyPayoutInitiated(
+                    { email: user.email, phone: user.phone },
+                    { transactionId, amount: roundedAmount, currency }
+                ).catch((err) => logger.error("Notification error (initiated):", err.message));
+            }
 
             logger.info("Payout initiated", { transactionId, userId, amount: roundedAmount, fraudScore: fraudScore.riskScore });
 

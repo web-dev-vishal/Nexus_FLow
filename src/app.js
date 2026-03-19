@@ -19,10 +19,19 @@ import PublicApiService from "./services/public-api.service.js";
 import GroqClient from "./services/groq.service.js";
 import IPValidator from "./services/ip-validator.service.js";
 import CurrencyValidator from "./services/currency-validator.service.js";
+import WebhookService from "./services/webhook.service.js";
+import SpendingLimitService from "./services/spending-limit.service.js";
+import NotificationService from "./services/notification.service.js";
+import AdminService from "./services/admin.service.js";
+import SchedulerService from "./services/scheduler.service.js";
 
 import PayoutController from "./controllers/payout.controller.js";
 import AIController from "./controllers/ai.controller.js";
 import PublicApiController from "./controllers/public-api.controller.js";
+import WebhookController from "./controllers/webhook.controller.js";
+import SchedulerController from "./controllers/scheduler.controller.js";
+import SpendingLimitController from "./controllers/spending-limit.controller.js";
+import AdminController from "./controllers/admin.controller.js";
 
 import { globalLimiter, payoutUserLimiter } from "./middleware/rate-limit.middleware.js";
 import { xssSanitizer } from "./middleware/sanitize.middleware.js";
@@ -33,15 +42,20 @@ import createPayoutRouter from "./routes/payout.route.js";
 import createAIRouter from "./routes/ai.route.js";
 import createHealthRouter from "./routes/health.route.js";
 import createPublicApiRouter from "./routes/public-api.route.js";
+import createWebhookRouter from "./routes/webhook.route.js";
+import createSchedulerRouter from "./routes/scheduler.route.js";
+import createSpendingLimitRouter from "./routes/spending-limit.route.js";
+import createAdminRouter from "./routes/admin.route.js";
 
 import logger from "./utils/logger.js";
 
 class Application {
     constructor() {
-        this.app    = express();
-        this.server = null; // HTTP server (created later so Socket.IO can attach)
-        this.redis  = null;
-        this.io     = null;
+        this.app       = express();
+        this.server    = null; // HTTP server (created later so Socket.IO can attach)
+        this.redis     = null;
+        this.io        = null;
+        this.scheduler = null; // background job for scheduled payouts
     }
 
     async initialize() {
@@ -68,6 +82,10 @@ class Application {
 
         // Bridge Redis pub/sub → Socket.IO so the worker can push real-time events
         this._setupWebSocketBridge();
+
+        // Start the scheduler — polls every minute for due scheduled payouts
+        this.scheduler = services.scheduler;
+        this.scheduler.start();
 
         logger.info("Application initialized successfully");
         return this;
@@ -107,12 +125,16 @@ class Application {
         const redis = this.redis;
 
         // Each service gets the Redis client injected — no global state
-        const distributedLock   = new DistributedLock(redis);
-        const balanceService    = new BalanceService(redis);
-        const messagePublisher  = new MessagePublisher(rabbitmq.getChannel());
-        const groqClient        = new GroqClient();
-        const ipValidator       = new IPValidator(redis);
-        const currencyValidator = new CurrencyValidator(redis);
+        const distributedLock    = new DistributedLock(redis);
+        const balanceService     = new BalanceService(redis);
+        const messagePublisher   = new MessagePublisher(rabbitmq.getChannel());
+        const groqClient         = new GroqClient();
+        const ipValidator        = new IPValidator(redis);
+        const currencyValidator  = new CurrencyValidator(redis);
+        const webhookService     = new WebhookService();
+        const spendingLimitService = new SpendingLimitService(redis);
+        const notificationService  = new NotificationService();
+        const adminService       = new AdminService(balanceService);
 
         // Give the error handler access to Groq so it can generate friendly error messages
         setGroqClient(groqClient);
@@ -126,26 +148,41 @@ class Application {
             ipValidator,
             currencyValidator,
             groqClient,
+            webhookService,
+            spendingLimitService,
+            notificationService,
         });
+
+        // Scheduler needs the payout service to execute due payouts
+        const schedulerService = new SchedulerService(payoutService);
 
         // PublicApiService wraps free public APIs with Redis caching
         const publicApiService = new PublicApiService(redis);
 
         return {
-            payoutController:   new PayoutController(payoutService),
-            aiController:       new AIController(ipValidator, currencyValidator),
-            publicApiController: new PublicApiController(publicApiService),
-            userRateLimiter:    payoutUserLimiter(redis),
-            healthDependencies: { database, redis: redisConnection, rabbitmq, websocket: websocketServer },
+            payoutController:        new PayoutController(payoutService),
+            aiController:            new AIController(ipValidator, currencyValidator),
+            publicApiController:     new PublicApiController(publicApiService),
+            webhookController:       new WebhookController(webhookService),
+            schedulerController:     new SchedulerController(),
+            spendingLimitController: new SpendingLimitController(spendingLimitService),
+            adminController:         new AdminController(adminService),
+            scheduler:               schedulerService,
+            userRateLimiter:         payoutUserLimiter(redis),
+            healthDependencies:      { database, redis: redisConnection, rabbitmq, websocket: websocketServer },
         };
     }
 
-    _setupRoutes({ payoutController, aiController, publicApiController, userRateLimiter, healthDependencies }) {
-        this.app.use("/api/auth",       authRoutes);
-        this.app.use("/api/payout",     createPayoutRouter(payoutController, userRateLimiter));
-        this.app.use("/api/ai",         createAIRouter(aiController));
-        this.app.use("/api/public",     createPublicApiRouter(publicApiController));
-        this.app.use("/api/health",     createHealthRouter(healthDependencies));
+    _setupRoutes({ payoutController, aiController, publicApiController, webhookController, schedulerController, spendingLimitController, adminController, userRateLimiter, healthDependencies }) {
+        this.app.use("/api/auth",               authRoutes);
+        this.app.use("/api/payout",             createPayoutRouter(payoutController, userRateLimiter));
+        this.app.use("/api/ai",                 createAIRouter(aiController));
+        this.app.use("/api/public",             createPublicApiRouter(publicApiController));
+        this.app.use("/api/health",             createHealthRouter(healthDependencies));
+        this.app.use("/api/webhooks",           createWebhookRouter(webhookController));
+        this.app.use("/api/scheduled-payouts",  createSchedulerRouter(schedulerController));
+        this.app.use("/api/spending-limits",    createSpendingLimitRouter(spendingLimitController));
+        this.app.use("/api/admin",              createAdminRouter(adminController));
 
         // Simple info endpoint — useful for a quick sanity check
         this.app.get("/api", (_req, res) => {
@@ -157,19 +194,22 @@ class Application {
                     aiPowered:          process.env.ENABLE_AI_FEATURES === "true",
                     ipValidation:       process.env.ENABLE_IP_VALIDATION === "true",
                     currencyValidation: process.env.ENABLE_CURRENCY_VALIDATION === "true",
+                    webhooks:           true,
+                    scheduledPayouts:   true,
+                    spendingLimits:     true,
+                    adminDashboard:     true,
+                    notifications:      !!(process.env.MAIL_USER),
                 },
-                publicApis: {
-                    exchangeRates:       "/api/public/rates",
-                    convert:             "/api/public/convert",
-                    historicalRates:     "/api/public/rates/historical",
-                    historicalRange:     "/api/public/rates/historical/range",
-                    countries:           "/api/public/countries",
-                    country:             "/api/public/country/:code",
-                    vatRates:            "/api/public/vat",
-                    crypto:              "/api/public/crypto",
-                    cryptoConvert:       "/api/public/crypto/convert",
-                    cardBinLookup:       "/api/public/bin/:bin",
-                    postcodeLookup:      "/api/public/postcode/:country/:postcode",
+                endpoints: {
+                    auth:             "/api/auth",
+                    payout:           "/api/payout",
+                    webhooks:         "/api/webhooks",
+                    scheduledPayouts: "/api/scheduled-payouts",
+                    spendingLimits:   "/api/spending-limits",
+                    admin:            "/api/admin",
+                    publicApis:       "/api/public",
+                    ai:               "/api/ai",
+                    health:           "/api/health",
                 },
             });
         });
@@ -215,6 +255,9 @@ class Application {
 
     async shutdown() {
         logger.info("Shutting down...");
+
+        // Stop the scheduler first so no new payouts are kicked off during shutdown
+        if (this.scheduler) this.scheduler.stop();
 
         // Close in reverse order of initialization
         if (this.io)     await websocketServer.close();
