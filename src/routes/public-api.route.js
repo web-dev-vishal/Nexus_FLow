@@ -12,6 +12,7 @@
 
 import express from "express";
 import { validate } from "../validators/user.validate.js";
+import { publicApiLimiter } from "../middleware/rate-limit.middleware.js";
 import {
     convertCurrencyQuerySchema,
     historicalRatesQuerySchema,
@@ -25,6 +26,9 @@ import {
 
 const createPublicApiRouter = (publicApiController) => {
     const router = express.Router();
+
+    // Rate limit all public API proxy endpoints — prevents hammering external services
+    router.use(publicApiLimiter);
 
     // ── Currency exchange rates ──────────────────────────────────────────────
     // GET /api/public/rates?base=USD

@@ -1,0 +1,11 @@
+{
+  "name": "backend-audit",
+  "version": "1.0.0",
+  "description": "Static security and production-readiness audit tool for SwiftPay",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "node tests/property-tests.js && node tests/devops-smoke.js",
+    "audit": "node index.js"
+  }
+}

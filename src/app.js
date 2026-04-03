@@ -2,9 +2,11 @@ import express from "express";
 import http from "http";
 import helmet from "helmet";
 import cors from "cors";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import mongoSanitize from "express-mongo-sanitize";
 import hpp from "hpp";
+import { v4 as uuidv4 } from "uuid";
 
 import database from "./config/database.js";
 import redisConnection from "./config/redis.js";
@@ -94,16 +96,41 @@ class Application {
     }
 
     _setupMiddleware() {
-        // Security headers — sets X-Content-Type-Options, X-Frame-Options, etc.
-        this.app.use(helmet());
+        // Security headers — sets X-Content-Type-Options, X-Frame-Options, CSP, etc.
+        this.app.use(helmet({
+            contentSecurityPolicy: {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc:  ["'self'"],
+                    styleSrc:   ["'self'", "'unsafe-inline'"],
+                    imgSrc:     ["'self'", "data:", "https:"],
+                    connectSrc: ["'self'"],
+                    fontSrc:    ["'self'"],
+                    objectSrc:  ["'none'"],
+                    frameSrc:   ["'none'"],
+                },
+            },
+        }));
 
-        // Allow cross-origin requests from the frontend
+        // Allow cross-origin requests from the configured frontend origin only
+        // Never fall back to "*" — that would allow any site to make credentialed requests
+        const allowedOrigin = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
         this.app.use(cors({
-            origin:         process.env.CLIENT_URL || process.env.CORS_ORIGIN || "*",
+            origin:         allowedOrigin || (process.env.NODE_ENV === "production" ? false : "*"),
             credentials:    true,
             methods:        ["GET", "POST", "PUT", "DELETE", "PATCH"],
-            allowedHeaders: ["Content-Type", "Authorization"],
+            allowedHeaders: ["Content-Type", "Authorization", "X-Correlation-ID"],
         }));
+
+        // Compress all responses — reduces bandwidth significantly for JSON payloads
+        this.app.use(compression());
+
+        // Attach a unique correlation ID to every request for distributed tracing.
+        // Clients can pass their own via X-Correlation-ID header, or we generate one.
+        this.app.use((req, _res, next) => {
+            req.correlationId = req.headers["x-correlation-id"] || uuidv4();
+            next();
+        });
 
         // Parse JSON and URL-encoded bodies, cap at 10kb to prevent large payload attacks
         this.app.use(express.json({ limit: "10kb" }));

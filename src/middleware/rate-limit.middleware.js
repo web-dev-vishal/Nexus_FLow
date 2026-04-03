@@ -59,6 +59,12 @@ export const verifyOtpLimiter = createLimiter(
     "Too many OTP attempts. Please request a new OTP."
 );
 
+// 60 requests per minute for public API proxy endpoints — prevents hammering external APIs
+export const publicApiLimiter = createLimiter(
+    60, 60, "public-api",
+    "Too many public API requests. Please try again after a minute."
+);
+
 export const changePasswordLimiter = createLimiter(
     5, 60 * 60, "change-password",
     "Too many password change attempts. Please try again after an hour."

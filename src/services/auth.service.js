@@ -7,6 +7,7 @@ import User from "../models/user.model.js";
 import { verifyMail } from "../email/verifyMail.js";
 import { sendOtpMail } from "../email/sendOtpMail.js";
 import { getRedis, keys, TTL } from "../lib/redis.js";
+import logger from "../utils/logger.js";
 
 // Shorthand wrapper so we don't have to write getRedis().get() everywhere.
 // All three methods just forward to the real Redis client.
@@ -26,13 +27,13 @@ const createError = (statusCode, message) => {
 };
 
 // ── Helper: generate access + refresh tokens ──────────────────────────────────
-// Access token: short-lived (10 days), sent with every API request
+// Access token: short-lived (15 minutes), sent with every API request
 // Refresh token: longer-lived (30 days), used only to get a new access token
 const generateTokens = (userId) => {
     const id = userId.toString();
 
     const accessToken = jwt.sign({ id }, process.env.ACCESS_SECRET, {
-        expiresIn: "10d",
+        expiresIn: "15m",
     });
 
     const refreshToken = jwt.sign({ id }, process.env.REFRESH_SECRET, {
@@ -72,7 +73,7 @@ export const registerService = async ({ username, email, password }) => {
     // Send the verification email — we don't await this so registration doesn't slow down
     // If the email fails, we just log it — the user can request a new one
     verifyMail(verificationToken, email).catch((err) =>
-        console.error("Failed to send verification email:", err.message)
+        logger.error("Failed to send verification email:", err.message)
     );
 
     // Return only safe fields — never return the password hash
@@ -210,7 +211,7 @@ export const refreshTokenService = async (token) => {
     const accessToken = jwt.sign(
         { id: userId },
         process.env.ACCESS_SECRET,
-        { expiresIn: "10d" }
+        { expiresIn: "15m" }
     );
 
     return { accessToken };

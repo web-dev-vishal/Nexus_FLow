@@ -1,0 +1,810 @@
+{
+  "meta": {
+    "tool": "backend-audit",
+    "version": "1.0.0",
+    "target": "C:\\Users\\vishal sanam\\Downloads\\Smart Thing",
+    "generated_at": "2026-04-03T18:26:43.599Z"
+  },
+  "summary": {
+    "total_checks": 89,
+    "passed": 69,
+    "failed": 20,
+    "critical": 0,
+    "score": 78
+  },
+  "production_ready": true,
+  "domains": {
+    "Authentication": [
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-001",
+        "status": "failed",
+        "description": "JWT (jsonwebtoken) is used instead of PASETO. JWT is vulnerable to algorithm confusion attacks.",
+        "remediation": "Replace jsonwebtoken with the paseto library and use v4.local or v4.public tokens."
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-003",
+        "status": "passed",
+        "description": "No hardcoded token secrets detected in source files.",
+        "remediation": ""
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-004",
+        "status": "passed",
+        "description": "Token secrets are read from environment variables.",
+        "remediation": ""
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-005",
+        "status": "passed",
+        "description": "All detected jwt.sign() calls include an expiresIn option.",
+        "remediation": ""
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-006",
+        "status": "failed",
+        "description": "Access token TTL exceeds 24 hours (e.g., \"10d\"). This increases the window for token misuse.",
+        "remediation": "Reduce access token TTL to 15–60 minutes. Use refresh tokens for session continuity."
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-007",
+        "status": "passed",
+        "description": "Password hashing uses bcrypt/argon2 with adequate salt rounds.",
+        "remediation": ""
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-008",
+        "status": "failed",
+        "description": "No route files found to verify auth middleware coverage.",
+        "remediation": "Ensure all private routes apply isAuthenticated middleware."
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-009",
+        "status": "passed",
+        "description": "Role-check middleware exists and is applied to admin routes.",
+        "remediation": ""
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-010",
+        "status": "passed",
+        "description": "Logout deletes the token from the session store (Redis).",
+        "remediation": ""
+      },
+      {
+        "domain": "Authentication",
+        "checkId": "AUTH-011",
+        "status": "passed",
+        "description": "Refresh tokens are stored server-side in Redis and validated on use.",
+        "remediation": ""
+      }
+    ],
+    "Input_Validation": [
+      {
+        "domain": "Input_Validation",
+        "checkId": "INP-001",
+        "status": "failed",
+        "description": "No route files found to verify schema validation coverage.",
+        "remediation": "Ensure all route handlers apply schema validation middleware before the controller."
+      },
+      {
+        "domain": "Input_Validation",
+        "checkId": "INP-003",
+        "status": "passed",
+        "description": "express-mongo-sanitize is registered as global middleware.",
+        "remediation": ""
+      },
+      {
+        "domain": "Input_Validation",
+        "checkId": "INP-004",
+        "status": "passed",
+        "description": "XSS sanitization middleware is applied globally.",
+        "remediation": ""
+      },
+      {
+        "domain": "Input_Validation",
+        "checkId": "INP-005",
+        "status": "passed",
+        "description": "HTTP parameter pollution protection (hpp) is registered as global middleware.",
+        "remediation": ""
+      },
+      {
+        "domain": "Input_Validation",
+        "checkId": "INP-006",
+        "status": "passed",
+        "description": "Request body size is limited (e.g., express.json({ limit: \"10kb\" })).",
+        "remediation": ""
+      },
+      {
+        "domain": "Input_Validation",
+        "checkId": "INP-007",
+        "status": "passed",
+        "description": "No loose Zod typing (z.any() or z.unknown()) detected in validator schemas.",
+        "remediation": ""
+      }
+    ],
+    "API_Design": [
+      {
+        "domain": "API_Design",
+        "checkId": "API-001",
+        "status": "passed",
+        "description": "helmet is registered as global middleware.",
+        "remediation": ""
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-002",
+        "status": "failed",
+        "description": "CORS origin has a wildcard (\"*\") fallback. In production this allows any origin.",
+        "remediation": "Set an explicit CORS origin without a wildcard fallback. Use an allowlist of trusted origins."
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-003",
+        "status": "passed",
+        "description": "Centralized error-handling middleware with 4 parameters (err, req, res, next) is registered.",
+        "remediation": ""
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-004",
+        "status": "passed",
+        "description": "404 handler is registered after all routes.",
+        "remediation": ""
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-005",
+        "status": "passed",
+        "description": "All async route handlers appear to be wrapped in try/catch or an async wrapper.",
+        "remediation": ""
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-006",
+        "status": "passed",
+        "description": "Rate limiting middleware is applied to authentication endpoints.",
+        "remediation": ""
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-007",
+        "status": "passed",
+        "description": "A global rate limiter is applied to all routes.",
+        "remediation": ""
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-008",
+        "status": "passed",
+        "description": "Controllers use semantically correct HTTP status codes.",
+        "remediation": ""
+      },
+      {
+        "domain": "API_Design",
+        "checkId": "API-009",
+        "status": "passed",
+        "description": "Stack traces are conditionally excluded from error responses in production.",
+        "remediation": ""
+      }
+    ],
+    "MongoDB": [
+      {
+        "domain": "MongoDB",
+        "checkId": "MDB-001",
+        "status": "failed",
+        "description": "No Mongoose model files found.",
+        "remediation": "Define Mongoose models with field-level validation."
+      },
+      {
+        "domain": "MongoDB",
+        "checkId": "MDB-002",
+        "status": "passed",
+        "description": "Unique fields have unique: true index defined in the schema.",
+        "remediation": ""
+      },
+      {
+        "domain": "MongoDB",
+        "checkId": "MDB-003",
+        "status": "passed",
+        "description": "Sensitive fields (password) are excluded from query results using .select(\"-password\") or select: false.",
+        "remediation": ""
+      },
+      {
+        "domain": "MongoDB",
+        "checkId": "MDB-004",
+        "status": "passed",
+        "description": "Pagination (limit/skip or cursor-based) is implemented for list endpoints.",
+        "remediation": ""
+      },
+      {
+        "domain": "MongoDB",
+        "checkId": "MDB-005",
+        "status": "failed",
+        "description": "No MongoDB transaction usage detected. Multi-document writes may not be atomic.",
+        "remediation": "Use MongoDB sessions and transactions for multi-document write operations that must be atomic."
+      },
+      {
+        "domain": "MongoDB",
+        "checkId": "MDB-006",
+        "status": "passed",
+        "description": "MongoDB connection string is read from an environment variable.",
+        "remediation": ""
+      },
+      {
+        "domain": "MongoDB",
+        "checkId": "MDB-007",
+        "status": "passed",
+        "description": "MongoDB connection pool settings (maxPoolSize, serverSelectionTimeoutMS) are explicitly configured.",
+        "remediation": ""
+      }
+    ],
+    "RabbitMQ": [
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-001",
+        "status": "passed",
+        "description": "Queues are declared with durable: true.",
+        "remediation": ""
+      },
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-002",
+        "status": "passed",
+        "description": "Messages are published with persistent: true (delivery mode 2).",
+        "remediation": ""
+      },
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-003",
+        "status": "passed",
+        "description": "Consumer uses manual acknowledgment (noAck: false) and calls channel.ack(msg) on success.",
+        "remediation": ""
+      },
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-004",
+        "status": "passed",
+        "description": "Dead-Letter Exchange (DLX) and Dead-Letter Queue (DLQ) are configured.",
+        "remediation": ""
+      },
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-005",
+        "status": "passed",
+        "description": "Retry mechanism with a maximum retry count is implemented.",
+        "remediation": ""
+      },
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-006",
+        "status": "passed",
+        "description": "Consumer checks for idempotency before processing (skips already-completed transactions).",
+        "remediation": ""
+      },
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-007",
+        "status": "passed",
+        "description": "RabbitMQ connection implements a reconnection strategy with a maximum attempt limit.",
+        "remediation": ""
+      },
+      {
+        "domain": "RabbitMQ",
+        "checkId": "RMQ-008",
+        "status": "passed",
+        "description": "RabbitMQ connection errors are logged and not swallowed.",
+        "remediation": ""
+      }
+    ],
+    "Socket.IO": [
+      {
+        "domain": "Socket.IO",
+        "checkId": "SIO-001",
+        "status": "passed",
+        "description": "Socket connections require authentication (token verification) before receiving application events.",
+        "remediation": ""
+      },
+      {
+        "domain": "Socket.IO",
+        "checkId": "SIO-002",
+        "status": "passed",
+        "description": "Socket authentication uses the same ACCESS_SECRET as the HTTP auth middleware.",
+        "remediation": ""
+      },
+      {
+        "domain": "Socket.IO",
+        "checkId": "SIO-003",
+        "status": "passed",
+        "description": "Each authenticated user is placed in an isolated room (user:<userId>).",
+        "remediation": ""
+      },
+      {
+        "domain": "Socket.IO",
+        "checkId": "SIO-004",
+        "status": "passed",
+        "description": "Disconnect events are handled and the client map is cleaned up.",
+        "remediation": ""
+      },
+      {
+        "domain": "Socket.IO",
+        "checkId": "SIO-005",
+        "status": "passed",
+        "description": "pingTimeout and pingInterval are explicitly configured.",
+        "remediation": ""
+      },
+      {
+        "domain": "Socket.IO",
+        "checkId": "SIO-006",
+        "status": "passed",
+        "description": "Incoming socket event payloads are validated before processing.",
+        "remediation": ""
+      },
+      {
+        "domain": "Socket.IO",
+        "checkId": "SIO-007",
+        "status": "failed",
+        "description": "Socket.IO CORS origin has a wildcard (\"*\") fallback. In production this allows any origin.",
+        "remediation": "Set an explicit CORS origin for Socket.IO without a wildcard fallback."
+      }
+    ],
+    "Logging": [
+      {
+        "domain": "Logging",
+        "checkId": "LOG-001",
+        "status": "passed",
+        "description": "Structured logging library (Winston) is used.",
+        "remediation": ""
+      },
+      {
+        "domain": "Logging",
+        "checkId": "LOG-002",
+        "status": "passed",
+        "description": "Log level is controlled by an environment variable (LOG_LEVEL).",
+        "remediation": ""
+      },
+      {
+        "domain": "Logging",
+        "checkId": "LOG-003",
+        "status": "passed",
+        "description": "No obvious sensitive field logging patterns detected.",
+        "remediation": ""
+      },
+      {
+        "domain": "Logging",
+        "checkId": "LOG-004",
+        "status": "passed",
+        "description": "Request logging middleware or per-request log entries are present.",
+        "remediation": ""
+      },
+      {
+        "domain": "Logging",
+        "checkId": "LOG-005",
+        "status": "passed",
+        "description": "A /health or /api/health endpoint exists.",
+        "remediation": ""
+      },
+      {
+        "domain": "Logging",
+        "checkId": "LOG-006",
+        "status": "passed",
+        "description": "Log files are written to a persistent directory with file rotation configured.",
+        "remediation": ""
+      }
+    ],
+    "Error_Handling": [
+      {
+        "domain": "Error_Handling",
+        "checkId": "ERR-001",
+        "status": "passed",
+        "description": "Both process.on(\"uncaughtException\") and process.on(\"unhandledRejection\") handlers are registered.",
+        "remediation": ""
+      },
+      {
+        "domain": "Error_Handling",
+        "checkId": "ERR-002",
+        "status": "passed",
+        "description": "Graceful shutdown closes all connections (DB, Redis, RabbitMQ) on SIGTERM and SIGINT.",
+        "remediation": ""
+      },
+      {
+        "domain": "Error_Handling",
+        "checkId": "ERR-003",
+        "status": "passed",
+        "description": "Stack traces are conditionally excluded from error responses in production.",
+        "remediation": ""
+      },
+      {
+        "domain": "Error_Handling",
+        "checkId": "ERR-004",
+        "status": "passed",
+        "description": ".catch() handlers are used for fire-and-forget async calls.",
+        "remediation": ""
+      },
+      {
+        "domain": "Error_Handling",
+        "checkId": "ERR-005",
+        "status": "passed",
+        "description": "Balance rollback logic is present in the worker for failed payout processing.",
+        "remediation": ""
+      },
+      {
+        "domain": "Error_Handling",
+        "checkId": "ERR-006",
+        "status": "failed",
+        "description": "Worker does not implement graceful shutdown. It may exit immediately on SIGTERM, dropping in-flight messages.",
+        "remediation": "Implement graceful shutdown in the worker: stop consuming, wait for in-flight messages, then disconnect."
+      }
+    ],
+    "Environment": [
+      {
+        "domain": "Environment",
+        "checkId": "ENV-001",
+        "status": "passed",
+        "description": "No hardcoded secrets or connection strings detected in source files.",
+        "remediation": ""
+      },
+      {
+        "domain": "Environment",
+        "checkId": "ENV-002",
+        "status": "passed",
+        "description": ".env.example file exists listing required environment variables.",
+        "remediation": ""
+      },
+      {
+        "domain": "Environment",
+        "checkId": "ENV-003",
+        "status": "passed",
+        "description": ".env is listed in .gitignore.",
+        "remediation": ""
+      },
+      {
+        "domain": "Environment",
+        "checkId": "ENV-004",
+        "status": "passed",
+        "description": "Required environment variables are referenced in the codebase (manual validation).",
+        "remediation": "Consider using envalid or joi to validate all required env vars at startup with clear error messages."
+      },
+      {
+        "domain": "Environment",
+        "checkId": "ENV-005",
+        "status": "passed",
+        "description": "NODE_ENV is referenced in the codebase to differentiate dev/production behavior.",
+        "remediation": ""
+      },
+      {
+        "domain": "Environment",
+        "checkId": "ENV-006",
+        "status": "failed",
+        "description": "No config validation library (envalid, joi) detected for startup environment validation.",
+        "remediation": "Use envalid or joi to validate and document all required environment variables at startup."
+      }
+    ],
+    "Performance": [
+      {
+        "domain": "Performance",
+        "checkId": "PERF-001",
+        "status": "passed",
+        "description": "Response compression middleware (compression) is registered.",
+        "remediation": ""
+      },
+      {
+        "domain": "Performance",
+        "checkId": "PERF-002",
+        "status": "passed",
+        "description": "Redis caching is used for frequently read data.",
+        "remediation": ""
+      },
+      {
+        "domain": "Performance",
+        "checkId": "PERF-003",
+        "status": "passed",
+        "description": "No synchronous blocking operations detected in request-handling code paths.",
+        "remediation": ""
+      },
+      {
+        "domain": "Performance",
+        "checkId": "PERF-004",
+        "status": "failed",
+        "description": "No index definitions found on high-cardinality fields (userId, email, transactionId).",
+        "remediation": "Add indexes to frequently queried fields: schema.index({ userId: 1 }), schema.index({ email: 1 })"
+      },
+      {
+        "domain": "Performance",
+        "checkId": "PERF-005",
+        "status": "passed",
+        "description": "No in-memory session storage detected. Sessions appear to be stored in Redis or a database.",
+        "remediation": ""
+      },
+      {
+        "domain": "Performance",
+        "checkId": "PERF-006",
+        "status": "passed",
+        "description": "Worker uses a prefetch count to limit concurrent message processing.",
+        "remediation": ""
+      }
+    ],
+    "Testing": [
+      {
+        "checkId": "TEST-001",
+        "domain": "Testing",
+        "status": "passed",
+        "description": "Test runner detected: \"jest\".",
+        "remediation": ""
+      },
+      {
+        "checkId": "TEST-002",
+        "domain": "Testing",
+        "status": "passed",
+        "description": "\"test\" script is defined in package.json: \"node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand\".",
+        "remediation": ""
+      },
+      {
+        "checkId": "TEST-003",
+        "domain": "Testing",
+        "status": "passed",
+        "description": "3 test file(s) found (*.test.js, *.spec.js, __tests__).",
+        "remediation": ""
+      },
+      {
+        "checkId": "TEST-004",
+        "domain": "Testing",
+        "status": "failed",
+        "description": "No integration or e2e tests found (no files with \"integration\", \"e2e\", or \"api\" in path, and no supertest usage).",
+        "remediation": "Add integration tests using supertest to cover your HTTP API endpoints."
+      },
+      {
+        "checkId": "TEST-005",
+        "domain": "Testing",
+        "status": "passed",
+        "description": "No live infrastructure connection strings detected in test files without mock patterns.",
+        "remediation": ""
+      },
+      {
+        "checkId": "TEST-006",
+        "domain": "Testing",
+        "status": "passed",
+        "description": "Auth flow keywords (register, login, refresh, logout) are all covered in test files.",
+        "remediation": ""
+      }
+    ],
+    "DevOps": [
+      {
+        "checkId": "OPS-001",
+        "domain": "DevOps",
+        "status": "failed",
+        "description": "No Dockerfile found in the project.",
+        "remediation": "Add a Dockerfile to containerise the application and enable consistent deployments."
+      },
+      {
+        "checkId": "OPS-002",
+        "domain": "DevOps",
+        "status": "passed",
+        "description": "docker-compose.yml detected.",
+        "remediation": ""
+      },
+      {
+        "checkId": "OPS-003",
+        "domain": "DevOps",
+        "status": "failed",
+        "description": "No ESLint configuration found (.eslintrc, .eslintrc.js, .eslintrc.json, eslint.config.js, or \"eslintConfig\" in package.json).",
+        "remediation": "Add an ESLint configuration file and install eslint as a devDependency to enforce consistent code style."
+      },
+      {
+        "checkId": "OPS-004",
+        "domain": "DevOps",
+        "status": "failed",
+        "description": "No Prettier configuration found (.prettierrc, .prettierrc.js, .prettierrc.json, prettier.config.js, or \"prettier\" key in package.json).",
+        "remediation": "Add a Prettier configuration file and install prettier as a devDependency to enforce consistent code formatting."
+      },
+      {
+        "checkId": "OPS-005",
+        "domain": "DevOps",
+        "status": "failed",
+        "description": "No CI/CD pipeline file found (.github/workflows/*.yml, .gitlab-ci.yml, Jenkinsfile, .circleci/config.yml, azure-pipelines.yml).",
+        "remediation": "Add a CI/CD pipeline configuration to automate testing, linting, and deployment."
+      },
+      {
+        "checkId": "OPS-006",
+        "domain": "DevOps",
+        "status": "failed",
+        "description": "No API documentation found (openapi.yaml, swagger.json/yaml, swagger-jsdoc config, or swagger/openapi source files).",
+        "remediation": "Add API documentation using OpenAPI/Swagger (e.g. swagger-jsdoc + swagger-ui-express) to improve developer experience."
+      },
+      {
+        "checkId": "OPS-007",
+        "domain": "DevOps",
+        "status": "failed",
+        "description": "No CHANGELOG file found (CHANGELOG.md, CHANGELOG, or HISTORY.md).",
+        "remediation": "Add a CHANGELOG.md to document notable changes for each release, following the Keep a Changelog format."
+      },
+      {
+        "checkId": "OPS-008",
+        "domain": "DevOps",
+        "status": "passed",
+        "description": "\"engines\" field detected in package.json: {\"node\":\">=20.0.0\"}.",
+        "remediation": ""
+      }
+    ],
+    "Critical_Gaps": [
+      {
+        "domain": "Critical_Gaps",
+        "checkId": "GAP-001",
+        "status": "failed",
+        "description": "No CSRF protection detected on state-changing endpoints.",
+        "remediation": "Add CSRF protection using the csurf package or enforce SameSite=Strict on session cookies for all state-changing (POST/PUT/PATCH/DELETE) endpoints."
+      },
+      {
+        "domain": "Critical_Gaps",
+        "checkId": "GAP-002",
+        "status": "passed",
+        "description": "Request correlation IDs are present for distributed tracing.",
+        "remediation": ""
+      },
+      {
+        "domain": "Critical_Gaps",
+        "checkId": "GAP-003",
+        "status": "passed",
+        "description": "Content-Security-Policy header is configured via helmet.",
+        "remediation": ""
+      },
+      {
+        "domain": "Critical_Gaps",
+        "checkId": "GAP-004",
+        "status": "failed",
+        "description": "No secrets rotation documentation or automation found.",
+        "remediation": "Document a secrets rotation procedure (e.g. in README or runbook) and consider automating rotation using AWS Secrets Manager, HashiCorp Vault, or a scheduled rotation script."
+      }
+    ]
+  },
+  "critical_vulnerabilities": [],
+  "suggested_fixes": [
+    {
+      "domain": "Authentication",
+      "checkId": "AUTH-001",
+      "status": "failed",
+      "description": "JWT (jsonwebtoken) is used instead of PASETO. JWT is vulnerable to algorithm confusion attacks.",
+      "remediation": "Replace jsonwebtoken with the paseto library and use v4.local or v4.public tokens."
+    },
+    {
+      "domain": "Authentication",
+      "checkId": "AUTH-006",
+      "status": "failed",
+      "description": "Access token TTL exceeds 24 hours (e.g., \"10d\"). This increases the window for token misuse.",
+      "remediation": "Reduce access token TTL to 15–60 minutes. Use refresh tokens for session continuity."
+    },
+    {
+      "domain": "Authentication",
+      "checkId": "AUTH-008",
+      "status": "failed",
+      "description": "No route files found to verify auth middleware coverage.",
+      "remediation": "Ensure all private routes apply isAuthenticated middleware."
+    },
+    {
+      "domain": "Input_Validation",
+      "checkId": "INP-001",
+      "status": "failed",
+      "description": "No route files found to verify schema validation coverage.",
+      "remediation": "Ensure all route handlers apply schema validation middleware before the controller."
+    },
+    {
+      "domain": "API_Design",
+      "checkId": "API-002",
+      "status": "failed",
+      "description": "CORS origin has a wildcard (\"*\") fallback. In production this allows any origin.",
+      "remediation": "Set an explicit CORS origin without a wildcard fallback. Use an allowlist of trusted origins."
+    },
+    {
+      "domain": "MongoDB",
+      "checkId": "MDB-001",
+      "status": "failed",
+      "description": "No Mongoose model files found.",
+      "remediation": "Define Mongoose models with field-level validation."
+    },
+    {
+      "domain": "MongoDB",
+      "checkId": "MDB-005",
+      "status": "failed",
+      "description": "No MongoDB transaction usage detected. Multi-document writes may not be atomic.",
+      "remediation": "Use MongoDB sessions and transactions for multi-document write operations that must be atomic."
+    },
+    {
+      "domain": "Socket.IO",
+      "checkId": "SIO-007",
+      "status": "failed",
+      "description": "Socket.IO CORS origin has a wildcard (\"*\") fallback. In production this allows any origin.",
+      "remediation": "Set an explicit CORS origin for Socket.IO without a wildcard fallback."
+    },
+    {
+      "domain": "Error_Handling",
+      "checkId": "ERR-006",
+      "status": "failed",
+      "description": "Worker does not implement graceful shutdown. It may exit immediately on SIGTERM, dropping in-flight messages.",
+      "remediation": "Implement graceful shutdown in the worker: stop consuming, wait for in-flight messages, then disconnect."
+    },
+    {
+      "domain": "Environment",
+      "checkId": "ENV-006",
+      "status": "failed",
+      "description": "No config validation library (envalid, joi) detected for startup environment validation.",
+      "remediation": "Use envalid or joi to validate and document all required environment variables at startup."
+    },
+    {
+      "domain": "Performance",
+      "checkId": "PERF-004",
+      "status": "failed",
+      "description": "No index definitions found on high-cardinality fields (userId, email, transactionId).",
+      "remediation": "Add indexes to frequently queried fields: schema.index({ userId: 1 }), schema.index({ email: 1 })"
+    },
+    {
+      "checkId": "TEST-004",
+      "domain": "Testing",
+      "status": "failed",
+      "description": "No integration or e2e tests found (no files with \"integration\", \"e2e\", or \"api\" in path, and no supertest usage).",
+      "remediation": "Add integration tests using supertest to cover your HTTP API endpoints."
+    },
+    {
+      "checkId": "OPS-001",
+      "domain": "DevOps",
+      "status": "failed",
+      "description": "No Dockerfile found in the project.",
+      "remediation": "Add a Dockerfile to containerise the application and enable consistent deployments."
+    },
+    {
+      "checkId": "OPS-003",
+      "domain": "DevOps",
+      "status": "failed",
+      "description": "No ESLint configuration found (.eslintrc, .eslintrc.js, .eslintrc.json, eslint.config.js, or \"eslintConfig\" in package.json).",
+      "remediation": "Add an ESLint configuration file and install eslint as a devDependency to enforce consistent code style."
+    },
+    {
+      "checkId": "OPS-004",
+      "domain": "DevOps",
+      "status": "failed",
+      "description": "No Prettier configuration found (.prettierrc, .prettierrc.js, .prettierrc.json, prettier.config.js, or \"prettier\" key in package.json).",
+      "remediation": "Add a Prettier configuration file and install prettier as a devDependency to enforce consistent code formatting."
+    },
+    {
+      "checkId": "OPS-005",
+      "domain": "DevOps",
+      "status": "failed",
+      "description": "No CI/CD pipeline file found (.github/workflows/*.yml, .gitlab-ci.yml, Jenkinsfile, .circleci/config.yml, azure-pipelines.yml).",
+      "remediation": "Add a CI/CD pipeline configuration to automate testing, linting, and deployment."
+    },
+    {
+      "checkId": "OPS-006",
+      "domain": "DevOps",
+      "status": "failed",
+      "description": "No API documentation found (openapi.yaml, swagger.json/yaml, swagger-jsdoc config, or swagger/openapi source files).",
+      "remediation": "Add API documentation using OpenAPI/Swagger (e.g. swagger-jsdoc + swagger-ui-express) to improve developer experience."
+    },
+    {
+      "checkId": "OPS-007",
+      "domain": "DevOps",
+      "status": "failed",
+      "description": "No CHANGELOG file found (CHANGELOG.md, CHANGELOG, or HISTORY.md).",
+      "remediation": "Add a CHANGELOG.md to document notable changes for each release, following the Keep a Changelog format."
+    },
+    {
+      "domain": "Critical_Gaps",
+      "checkId": "GAP-001",
+      "status": "failed",
+      "description": "No CSRF protection detected on state-changing endpoints.",
+      "remediation": "Add CSRF protection using the csurf package or enforce SameSite=Strict on session cookies for all state-changing (POST/PUT/PATCH/DELETE) endpoints."
+    },
+    {
+      "domain": "Critical_Gaps",
+      "checkId": "GAP-004",
+      "status": "failed",
+      "description": "No secrets rotation documentation or automation found.",
+      "remediation": "Document a secrets rotation procedure (e.g. in README or runbook) and consider automating rotation using AWS Secrets Manager, HashiCorp Vault, or a scheduled rotation script."
+    }
+  ]
+}

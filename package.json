@@ -11,17 +11,28 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "worker": "node src/worker/index.js",
-    "worker:dev": "nodemon src/worker/index.js"
+    "worker:dev": "nodemon src/worker/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js", "**/*.test.js", "**/*.spec.js"],
+    "transform": {},
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    }
   },
   "dependencies": {
     "amqplib": "^0.10.9",
     "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.3.1",
+    "glob": "^13.0.6",
     "handlebars": "^4.7.8",
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
@@ -31,11 +42,14 @@
     "nodemailer": "^6.9.13",
     "rate-limit-redis": "^4.3.1",
     "socket.io": "^4.8.3",
+    "uuid": "^13.0.0",
     "winston": "^3.19.0",
     "xss": "^1.0.15",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "fast-check": "^4.6.0",
+    "jest": "^30.3.0",
     "nodemon": "^3.1.0"
   }
 }

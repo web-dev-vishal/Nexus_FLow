@@ -6,9 +6,13 @@ import { validatePayout } from "../validators/payout.validate.js";
 import { validate } from "../validators/user.validate.js";
 import { createPayoutUserSchema, updatePayoutUserSchema, transactionHistoryQuerySchema, exportQuerySchema } from "../validators/payout-user.validate.js";
 import { walletOperationSchema } from "../validators/wallet.validate.js";
+import { isAuthenticated } from "../middleware/auth.middleware.js";
 
 const createPayoutRouter = (payoutController, userRateLimiter) => {
     const router = express.Router();
+
+    // All payout routes require a valid JWT — apply auth middleware globally for this router
+    router.use(isAuthenticated);
 
     // ── Payout user profile management ───────────────────────────────────────
 
