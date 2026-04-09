@@ -15,7 +15,7 @@ const transporter = nodemailer.createTransport({
 
 export const sendOtpMail = async (email, otp) => {
     await transporter.sendMail({
-        from: `"SwiftPay" <${process.env.MAIL_USER}>`,
+        from: `"NexusFlow" <${process.env.MAIL_USER}>`,
         to: email,
         subject: "Password Reset OTP",
         html: `<p>Your OTP for password reset is: <b>${otp}</b>. It is valid for 10 minutes.</p>`,

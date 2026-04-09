@@ -1,7 +1,7 @@
 {
-  "name": "swiftpay",
+  "name": "nexusflow",
   "version": "1.0.0",
-  "description": "SwiftPay — AI-powered payout processing with real-time WebSocket updates",
+  "description": "NexusFlow — AI-powered payout processing with real-time WebSocket updates",
   "main": "server.js",
   "type": "module",
   "engines": {

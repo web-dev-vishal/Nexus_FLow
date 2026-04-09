@@ -242,7 +242,7 @@ class Application {
         this.app.get("/api", (_req, res) => {
             res.json({
                 success:  true,
-                service:  "SwiftPay",
+                service:  "NexusFlow",
                 version:  "1.0.0",
                 features: {
                     aiPowered:          process.env.ENABLE_AI_FEATURES === "true",

@@ -31,7 +31,7 @@ export const verifyMail = async (token, email) => {
     });
 
     await transporter.sendMail({
-        from: `"SwiftPay" <${process.env.MAIL_USER}>`,
+        from: `"NexusFlow" <${process.env.MAIL_USER}>`,
         to: email,
         subject: "Email Verification",
         html,

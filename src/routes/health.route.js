@@ -18,7 +18,7 @@ const createHealthRouter = ({ database, redis, rabbitmq, websocket }) => {
             success:   true,
             status:    "healthy",
             timestamp: new Date().toISOString(),
-            service:   "swiftpay",
+            service:   "nexusflow",
         });
     });
 
@@ -94,7 +94,7 @@ const createHealthRouter = ({ database, redis, rabbitmq, websocket }) => {
             success:      !degraded,
             status,
             timestamp:    new Date().toISOString(),
-            service:      "swiftpay",
+            service:      "nexusflow",
             dependencies: deps,
         });
     });

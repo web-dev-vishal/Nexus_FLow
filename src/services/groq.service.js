@@ -105,7 +105,7 @@ class GroqClient {
               ).join("\n")
             : "No prior transaction history (first-time user).";
 
-        const systemPrompt = `You are a financial fraud detection agent for SwiftPay, a payout platform.
+        const systemPrompt = `You are a financial fraud detection agent for NexusFlow, a payout platform.
 Analyze payout requests and assign a risk score using chain-of-thought reasoning.
 Always respond with valid JSON only — no extra text.`;
 
@@ -252,7 +252,7 @@ Return ONLY this JSON:
     async investigateTransaction(sessionId, userMessage, transactionContext = {}) {
         // First turn — initialize the conversation with the transaction as context
         if (!this._conversations.has(sessionId)) {
-            const systemPrompt = `You are a fraud investigation agent for SwiftPay.
+            const systemPrompt = `You are a fraud investigation agent for NexusFlow.
 You are analyzing a specific transaction and answering questions about it.
 Be concise, factual, and highlight any red flags you notice.
 If you don't have enough information, say so clearly.
@@ -324,7 +324,7 @@ ${JSON.stringify(transactionContext, null, 2)}`;
             ? spendingLimits.map((l) => `${l.period}: ${l.limitAmount} ${l.currency} (used: ${l.used || 0})`).join(", ")
             : "No spending limits set";
 
-        const systemPrompt = `You are a financial coach agent for SwiftPay users.
+        const systemPrompt = `You are a financial coach agent for NexusFlow users.
 Analyze payout patterns and give actionable, friendly insights.
 Be specific with numbers. Keep your response under 300 words.`;
 

@@ -1,0 +1,227 @@
+# Render deployment configuration
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Services:
+#   - api-gateway   : Main HTTP + Socket.IO server
+#   - payout-worker : RabbitMQ consumer for payout_queue
+#   - workflow-worker: RabbitMQ consumer for workflow_queue
+#
+# External services required (provision separately on Render or use managed providers):
+#   - MongoDB Atlas  : https://cloud.mongodb.com
+#   - Redis          : Render Redis or Upstash
+#   - RabbitMQ       : CloudAMQP (free tier: 1M messages/month)
+
+services:
+  # ── API Gateway ─────────────────────────────────────────────────────────────
+  - type: web
+    name: nexusflow-api
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: LOG_LEVEL
+        value: info
+
+      # ── MongoDB ──────────────────────────────────────────────────────────────
+      - key: MONGO_URI
+        sync: false   # set in Render dashboard
+
+      # ── Redis ────────────────────────────────────────────────────────────────
+      - key: REDIS_URL
+        sync: false   # set in Render dashboard (use full URL with password)
+      - key: REDIS_PASSWORD
+        sync: false
+
+      # ── RabbitMQ ─────────────────────────────────────────────────────────────
+      - key: RABBITMQ_URL
+        sync: false   # CloudAMQP connection string
+
+      # ── Auth ─────────────────────────────────────────────────────────────────
+      - key: PASETO_ACCESS_PRIVATE
+        sync: false
+      - key: PASETO_ACCESS_PUBLIC
+        sync: false
+      - key: PASETO_REFRESH_PRIVATE
+        sync: false
+      - key: PASETO_REFRESH_PUBLIC
+        sync: false
+      - key: PASETO_VERIFY_PRIVATE
+        sync: false
+      - key: PASETO_VERIFY_PUBLIC
+        sync: false
+      - key: ACCESS_SECRET
+        sync: false
+      - key: REFRESH_SECRET
+        sync: false
+      - key: VERIFY_SECRET
+        sync: false
+
+      # ── Email ─────────────────────────────────────────────────────────────────
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASS
+        sync: false
+      - key: MAIL_SERVICE
+        value: gmail
+
+      # ── CORS ──────────────────────────────────────────────────────────────────
+      - key: CLIENT_URL
+        sync: false   # your frontend URL e.g. https://nexusflow.vercel.app
+      - key: CORS_ORIGIN
+        sync: false
+
+      # ── AI ────────────────────────────────────────────────────────────────────
+      - key: ENABLE_AI_FEATURES
+        value: "true"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY_1
+        sync: false
+      - key: OPENROUTER_API_KEY_2
+        sync: false
+      - key: OPENROUTER_API_KEY_3
+        sync: false
+      - key: MODEL_NAME
+        value: meta-llama/llama-3.3-70b-instruct:free
+      - key: APP_NAME
+        value: NexusFlow
+      - key: FRAUD_RISK_THRESHOLD
+        value: "70"
+
+      # ── Workers ───────────────────────────────────────────────────────────────
+      - key: WORKER_CONCURRENCY
+        value: "5"
+      - key: WORKFLOW_CONCURRENCY
+        value: "3"
+      - key: MAX_RETRY_ATTEMPTS
+        value: "3"
+      - key: RETRY_DELAY_MS
+        value: "5000"
+      - key: LOCK_TTL_MS
+        value: "30000"
+      - key: SCHEDULER_INTERVAL_MS
+        value: "60000"
+
+      # ── Admin ─────────────────────────────────────────────────────────────────
+      - key: ADMIN_SECRET
+        sync: false
+
+      # ── Optional ──────────────────────────────────────────────────────────────
+      - key: ENABLE_IP_VALIDATION
+        value: "false"
+      - key: ENABLE_CURRENCY_VALIDATION
+        value: "false"
+      - key: EXCHANGE_RATE_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+
+  # ── Payout Worker ────────────────────────────────────────────────────────────
+  - type: worker
+    name: nexusflow-payout-worker
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: node src/worker/index.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_CONCURRENCY
+        value: "5"
+      - key: MAX_RETRY_ATTEMPTS
+        value: "3"
+      - key: RETRY_DELAY_MS
+        value: "5000"
+      - key: LOCK_TTL_MS
+        value: "30000"
+      - key: LOG_LEVEL
+        value: info
+      - key: MONGO_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: RABBITMQ_URL
+        sync: false
+      - key: ENABLE_AI_FEATURES
+        value: "true"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASS
+        sync: false
+      - key: MAIL_SERVICE
+        value: gmail
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: FRAUD_RISK_THRESHOLD
+        value: "70"
+
+  # ── Workflow Worker ───────────────────────────────────────────────────────────
+  - type: worker
+    name: nexusflow-workflow-worker
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: node src/worker/workflow.worker.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKFLOW_CONCURRENCY
+        value: "3"
+      - key: MAX_RETRY_ATTEMPTS
+        value: "3"
+      - key: LOG_LEVEL
+        value: info
+      - key: MONGO_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: RABBITMQ_URL
+        sync: false
+      - key: ENABLE_AI_FEATURES
+        value: "true"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY_1
+        sync: false
+      - key: OPENROUTER_API_KEY_2
+        sync: false
+      - key: OPENROUTER_API_KEY_3
+        sync: false
+      - key: MODEL_NAME
+        value: meta-llama/llama-3.3-70b-instruct:free
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASS
+        sync: false
+      - key: MAIL_SERVICE
+        value: gmail

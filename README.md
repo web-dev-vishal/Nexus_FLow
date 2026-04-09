@@ -1,4 +1,4 @@
-# SwiftPay + NexusFlow
+# NexusFlow
 
 AI-powered payout processing with real-time collaboration, workflow automation, and WebSocket updates.
 
@@ -21,12 +21,12 @@ AI-powered payout processing with real-time collaboration, workflow automation, 
 - Redis for sessions, rate limiting, balance cache, distributed locks, and pub/sub
 - NexusFlow — workspaces, channels (with threads, reactions, pins, search), direct messages, workflow automation, notifications
 - Workflow nodes: `ai_agent`, `send_message`, `send_email`, `http_request`, `condition`, `delay`
-- AI providers in workflows: Groq, NVIDIA NIM, OpenRouter (25+ free models)
+- AI providers in workflows: Groq, OpenRouter (25+ free models)
 - Admin dashboard — user management, transaction oversight, audit logs, reports
 
 ## Stack
 
-Node.js · Express · MongoDB · Redis · RabbitMQ · Socket.IO · PASETO v4 · Groq · NVIDIA NIM · OpenRouter · Winston · Zod
+Node.js · Express · MongoDB · Redis · RabbitMQ · Socket.IO · PASETO v4 · Groq · OpenRouter · Winston · Zod
 
 ---
 
@@ -329,7 +329,7 @@ Workflows are defined as a directed graph of nodes executed by the workflow work
 
 | Node type | What it does |
 |-----------|-------------|
-| `ai_agent` | Calls an AI model (Groq / NVIDIA NIM / OpenRouter). Tasks: `score_fraud`, `summarise`, `sentiment`, `translate`, `research`, `document_qa`, `smart_reply`, `explain_code`, `critique` |
+| `ai_agent` | Calls an AI model (Groq / OpenRouter). Tasks: `score_fraud`, `summarise`, `sentiment`, `translate`, `research`, `document_qa`, `smart_reply`, `explain_code`, `critique` |
 | `send_message` | Posts a message to a workspace channel |
 | `send_email` | Sends an email via Nodemailer |
 | `http_request` | Calls an external webhook or API |
@@ -347,7 +347,6 @@ Node configs support `{{variable}}` interpolation from previous node outputs.
 | Provider | Used for | Key |
 |----------|----------|-----|
 | Groq (Llama 3.3 70B) | Fraud scoring, anomaly detection, risk assessment, investigation, financial coaching | `GROQ_API_KEY` |
-| NVIDIA NIM | Summarisation, sentiment analysis, translation, classification | `NVIDIA_API_KEY` |
 | OpenRouter (25+ free models) | Research, document Q&A, smart replies, code explanation, critic pass | `OPENROUTER_API_KEY` |
 
 All AI features are optional and disabled by default (`ENABLE_AI_FEATURES=false`).

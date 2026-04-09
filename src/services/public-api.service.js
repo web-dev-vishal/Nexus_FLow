@@ -43,7 +43,7 @@ class PublicApiService {
 
         try {
             const res = await fetch(url, {
-                headers: { "User-Agent": "SwiftPay/1.0" },
+                headers: { "User-Agent": "NexusFlow/1.0" },
                 signal:  controller.signal,
             });
 
@@ -512,7 +512,7 @@ class PublicApiService {
 
             const res = await fetch(`https://lookup.binlist.net/${cleanBin}`, {
                 headers: {
-                    "User-Agent":  "SwiftPay/1.0",
+                    "User-Agent":  "NexusFlow/1.0",
                     "Accept-Version": "3",
                 },
                 signal: controller.signal,

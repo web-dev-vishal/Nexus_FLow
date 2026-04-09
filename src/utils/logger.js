@@ -43,7 +43,7 @@ const consoleFormat = winston.format.combine(
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || "info",
     format: jsonFormat,
-    defaultMeta: { service: "swiftpay" },
+    defaultMeta: { service: "nexusflow" },
     transports: [
         // Console — always on, uses the readable format
         new winston.transports.Console({ format: consoleFormat }),

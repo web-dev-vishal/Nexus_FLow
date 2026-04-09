@@ -122,7 +122,7 @@ class WebhookService {
             amount:        1.00,
             currency:      "USD",
             userId,
-            message:       "This is a test delivery from SwiftPay",
+            message:       "This is a test delivery from NexusFlow",
         };
 
         // Run the delivery and wait for the result so we can report success/failure
@@ -188,10 +188,10 @@ class WebhookService {
                 method:  "POST",
                 headers: {
                     "Content-Type":       "application/json",
-                    "X-SwiftPay-Event":   eventName,
-                    "X-SwiftPay-Secret":  webhook.secret,
-                    "X-SwiftPay-Sig":     `sha256=${signature}`,
-                    "User-Agent":         "SwiftPay-Webhooks/1.0",
+                    "X-NexusFlow-Event":   eventName,
+                    "X-NexusFlow-Secret":  webhook.secret,
+                    "X-NexusFlow-Sig":     `sha256=${signature}`,
+                    "User-Agent":         "NexusFlow-Webhooks/1.0",
                 },
                 body,
                 signal: controller.signal,

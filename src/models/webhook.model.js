@@ -29,7 +29,7 @@ const webhookSchema = new mongoose.Schema(
         },
 
         // A secret the user can use to verify the webhook came from us.
-        // We include it as a header (X-SwiftPay-Secret) on every delivery.
+        // We include it as a header (X-NexusFlow-Secret) on every delivery.
         secret: {
             type:     String,
             required: true,

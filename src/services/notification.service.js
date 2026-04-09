@@ -50,7 +50,7 @@ class NotificationService {
         });
 
         await this._sendEmail(user.email, subject, html);
-        await this._sendSms(user.phone, `SwiftPay: Your payout of ${amount} ${currency} has been initiated. Ref: ${transactionId}`);
+        await this._sendSms(user.phone, `NexusFlow: Your payout of ${amount} ${currency} has been initiated. Ref: ${transactionId}`);
     }
 
     // Send a payout completed notification
@@ -67,11 +67,11 @@ class NotificationService {
                 { label: "New Balance",     value: `${newBalance} USD` },
                 { label: "Time",            value: new Date().toLocaleString() },
             ],
-            footer: "Thank you for using SwiftPay.",
+            footer: "Thank you for using NexusFlow.",
         });
 
         await this._sendEmail(user.email, subject, html);
-        await this._sendSms(user.phone, `SwiftPay: Payout of ${amount} ${currency} completed. New balance: ${newBalance} USD. Ref: ${transactionId}`);
+        await this._sendSms(user.phone, `NexusFlow: Payout of ${amount} ${currency} completed. New balance: ${newBalance} USD. Ref: ${transactionId}`);
     }
 
     // Send a payout failed notification
@@ -92,7 +92,7 @@ class NotificationService {
         });
 
         await this._sendEmail(user.email, subject, html);
-        await this._sendSms(user.phone, `SwiftPay: Payout of ${amount} ${currency} failed. Ref: ${transactionId}. Contact support if needed.`);
+        await this._sendSms(user.phone, `NexusFlow: Payout of ${amount} ${currency} failed. Ref: ${transactionId}. Contact support if needed.`);
     }
 
     // Send a spending limit warning when a user is close to their limit
@@ -121,7 +121,7 @@ class NotificationService {
 
         try {
             await this.transporter.sendMail({
-                from:    `"SwiftPay" <${process.env.MAIL_USER}>`,
+                from:    `"NexusFlow" <${process.env.MAIL_USER}>`,
                 to,
                 subject,
                 html,
@@ -174,7 +174,7 @@ class NotificationService {
                     <p style="margin:24px 0 0;color:#6b7280;font-size:13px;">${footer}</p>
                 </div>
                 <div style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
-                    <p style="margin:0;color:#9ca3af;font-size:12px;">SwiftPay — Secure Payout Platform</p>
+                    <p style="margin:0;color:#9ca3af;font-size:12px;">NexusFlow — Secure Payout Platform</p>
                 </div>
             </div>
         </body>

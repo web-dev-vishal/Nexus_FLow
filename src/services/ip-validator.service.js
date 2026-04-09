@@ -55,7 +55,7 @@ class IPValidator {
             const timeout = setTimeout(() => controller.abort(), 2000);
 
             const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
-                headers: { "User-Agent": "SwiftPay/1.0" },
+                headers: { "User-Agent": "NexusFlow/1.0" },
                 signal: controller.signal,
             });
 

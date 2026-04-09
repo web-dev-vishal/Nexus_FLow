@@ -3,7 +3,7 @@
 // Stored as JSON in MongoDB, executed by the workflow worker via RabbitMQ.
 //
 // Node types:
-//   ai_agent     — call an AI agent (groq/nvidia/openrouter)
+//   ai_agent     — call an AI agent (groq/openrouter)
 //   send_message — post a message to a channel
 //   send_email   — send an email via nodemailer
 //   http_request — call an external webhook/API

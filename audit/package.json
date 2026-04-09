@@ -1,7 +1,7 @@
 {
   "name": "backend-audit",
   "version": "1.0.0",
-  "description": "Static security and production-readiness audit tool for SwiftPay",
+  "description": "Static security and production-readiness audit tool for NexusFlow",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {

@@ -15,7 +15,6 @@ import Channel from "../models/channel.model.js";
 import Message from "../models/message.model.js";
 
 import GroqClient from "../services/groq.service.js";
-import NvidiaService from "../services/nvidia.service.js";
 import OpenRouterService from "../services/openrouter.service.js";
 
 import logger from "../utils/logger.js";
@@ -30,22 +29,17 @@ const nodeExecutors = {
         const { provider = "groq", task, prompt, model } = config;
         const resolvedPrompt = interpolate(prompt || "", context);
 
-        if (provider === "nvidia") {
-            const nvidia = new NvidiaService();
-            if (task === "summarise") return { output: await nvidia.summarise(resolvedPrompt) };
-            if (task === "sentiment") return { output: await nvidia.analyseSentiment(resolvedPrompt) };
-            if (task === "translate") return { output: await nvidia.translate(resolvedPrompt, config.targetLanguage || "English") };
-            return { output: await nvidia.summarise(resolvedPrompt) };
-        }
-
         if (provider === "openrouter") {
             const or = new OpenRouterService();
+            if (task === "summarise") return { output: await or.summarise(resolvedPrompt) };
+            if (task === "sentiment") return { output: await or.analyseSentiment(resolvedPrompt) };
+            if (task === "translate") return { output: await or.translate(resolvedPrompt, config.targetLanguage || "English") };
             if (task === "research")    return { output: await or.research(resolvedPrompt) };
             if (task === "document_qa") return { output: await or.documentQA(resolvedPrompt, context.document || "") };
             if (task === "smart_reply") return { output: await or.suggestReplies(resolvedPrompt) };
             if (task === "explain_code") return { output: await or.explainCode(resolvedPrompt) };
             if (task === "critique")    return { output: await or.critique(resolvedPrompt, config.originalTask || "") };
-            return { output: await or.research(resolvedPrompt) };
+            return { output: await or.chat(resolvedPrompt, config.systemPrompt || "You are a helpful assistant.", { model }) };
         }
 
         // Default: Groq
