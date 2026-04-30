@@ -29,6 +29,11 @@ import AuditLog from "../models/audit-log.model.js";
 
 import logger from "../utils/logger.js";
 import { calculateDuration } from "../utils/helpers.js";
+import {
+    payoutCompletedCounter,
+    payoutFailedCounter,
+    payoutProcessingDuration,
+} from "../utils/metrics.js";
 
 class WorkerService {
     constructor() {
@@ -77,24 +82,32 @@ class WorkerService {
         let transaction = null;
 
         try {
-            // Load the transaction record — it was created by the API gateway before publishing
-            transaction = await Transaction.findByTransactionId(transactionId);
+            // Atomically claim the transaction for processing.
+            // findOneAndUpdate with { status: "initiated" } filter ensures only ONE worker
+            // can win this race — the second worker gets null back and skips safely.
+            transaction = await Transaction.claimForProcessing(transactionId);
 
-            if (!transaction) throw new Error("TRANSACTION_NOT_FOUND");
-
-            // Idempotency guard — if the message was delivered twice (RabbitMQ can do this),
-            // skip it silently instead of double-processing
-            if (transaction.status === "completed") {
-                logger.warn("Transaction already completed — skipping", { transactionId });
-                return;
+            if (!transaction) {
+                // Either the transaction doesn't exist, or another worker already claimed it.
+                // Check which case we're in so we can log accurately.
+                const existing = await Transaction.findByTransactionId(transactionId);
+                if (!existing) {
+                    throw new Error("TRANSACTION_NOT_FOUND");
+                }
+                if (existing.status === "completed") {
+                    logger.warn("Transaction already completed — skipping (idempotent)", { transactionId });
+                    return; // ack the message — nothing to do
+                }
+                // status is "processing" or "failed" — another worker has it
+                logger.warn("Transaction already claimed by another worker — skipping", {
+                    transactionId,
+                    status: existing.status,
+                });
+                return; // ack the message — let the other worker finish
             }
 
-            if (transaction.status === "processing") {
-                throw new Error("ALREADY_PROCESSING");
-            }
-
-            // Mark as processing so concurrent workers don't pick it up
-            await transaction.markAsProcessing();
+            // Transaction is now atomically marked as "processing" in MongoDB.
+            // Log the state change and notify the user via WebSocket.
             await AuditLog.logAction(transactionId, userId, "PAYOUT_PROCESSING", { status: "processing" });
             await this._publishWsEvent(userId, "PAYOUT_PROCESSING", { transactionId, amount, currency });
 
@@ -174,6 +187,10 @@ class WorkerService {
                 amount,
                 processingTimeMs: calculateDuration(startTime),
             });
+
+            // Record business metrics
+            payoutCompletedCounter.inc({ currency });
+            payoutProcessingDuration.observe({ status: "completed" }, calculateDuration(startTime));
         } catch (error) {
             logger.error("Payout processing failed", {
                 transactionId,
@@ -184,7 +201,7 @@ class WorkerService {
 
             // Roll back the balance for unexpected errors.
             // Don't roll back for logic errors like "insufficient balance" — there's nothing to undo.
-            const nonRollbackErrors = new Set(["TRANSACTION_NOT_FOUND", "ALREADY_PROCESSING", "INSUFFICIENT_BALANCE", "BALANCE_NOT_FOUND"]);
+            const nonRollbackErrors = new Set(["TRANSACTION_NOT_FOUND", "INSUFFICIENT_BALANCE", "BALANCE_NOT_FOUND"]);
             if (!nonRollbackErrors.has(error.message)) {
                 try {
                     await this.balance.addBalance(userId, amount);
@@ -203,6 +220,9 @@ class WorkerService {
                 error:            error.message,
                 processingTimeMs: calculateDuration(startTime),
             });
+
+            // Record failure metric
+            payoutFailedCounter.inc({ reason: error.message });
 
             // Fire webhook and notification for the failure — background, non-blocking
             this.webhooks.deliverEvent(userId, "payout.failed", { transactionId, amount, currency, error: error.message })

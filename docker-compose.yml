@@ -73,8 +73,22 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-    volumes:
-      - ./logs:/app/logs
+    # Resource limits — prevent a runaway gateway from starving workers
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    # Use json-file with rotation instead of a shared bind-mount volume.
+    # Each container writes to its own log stream; the Docker daemon handles rotation.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     networks:
       - nexusflow_net
     depends_on:
@@ -103,8 +117,19 @@ services:
       NODE_ENV: production
       WORKER_TYPE: payout
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
-    volumes:
-      - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     networks:
       - nexusflow_net
     depends_on:
@@ -127,8 +152,19 @@ services:
       NODE_ENV: production
       WORKER_TYPE: workflow
       WORKFLOW_CONCURRENCY: ${WORKFLOW_CONCURRENCY:-3}
-    volumes:
-      - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     networks:
       - nexusflow_net
     depends_on:

@@ -3,6 +3,13 @@ import PayoutUser from "../models/payout-user.model.js";
 import AuditLog from "../models/audit-log.model.js";
 import logger from "../utils/logger.js";
 import { generateTransactionId, roundAmount } from "../utils/helpers.js";
+import {
+    payoutInitiatedCounter,
+    payoutFailedCounter,
+    fraudBlockedCounter,
+    spendingLimitBlockedCounter,
+    fraudScoringDuration,
+} from "../utils/metrics.js";
 
 // Map internal error codes to HTTP-friendly responses.
 // Throwing a string key (e.g. throw new Error("USER_NOT_FOUND")) keeps the
@@ -88,6 +95,7 @@ class PayoutService {
                         reason: "SPENDING_LIMIT_EXCEEDED",
                         detail: limitCheck.reason,
                     });
+                    spendingLimitBlockedCounter.inc();
                     throw Object.assign(new Error("SPENDING_LIMIT_EXCEEDED"), { detail: limitCheck });
                 }
             }
@@ -104,6 +112,7 @@ class PayoutService {
 
             // AI fraud scoring — uses transaction history to assess risk
             const txCount = await Transaction.countDocuments({ userId });
+            const fraudTimerEnd = fraudScoringDuration.startTimer();
             const fraudScore = await this.groq.scoreFraudRisk({
                 userId,
                 amount:           roundedAmount,
@@ -112,6 +121,7 @@ class PayoutService {
                 userCountry:      user.country || "US",
                 transactionCount: txCount,
             });
+            fraudTimerEnd();
 
             await AuditLog.logAction(transactionId, userId, "FRAUD_SCORE_CALCULATED", {
                 riskScore:      fraudScore.riskScore,
@@ -127,6 +137,7 @@ class PayoutService {
                     riskScore: fraudScore.riskScore,
                     threshold: riskThreshold,
                 });
+                fraudBlockedCounter.inc();
                 throw new Error("HIGH_FRAUD_RISK");
             }
 
@@ -206,6 +217,9 @@ class PayoutService {
 
             logger.info("Payout initiated", { transactionId, userId, amount: roundedAmount, fraudScore: fraudScore.riskScore });
 
+            // Increment business metric
+            payoutInitiatedCounter.inc({ currency, source: metadata.source || "api" });
+
             return {
                 success:       true,
                 transactionId,
@@ -230,6 +244,9 @@ class PayoutService {
                 message:    "An error occurred while processing your request",
                 statusCode: 500,
             };
+
+            // Increment failure metric — label by error code for dashboard breakdown
+            payoutFailedCounter.inc({ reason: mapped.code });
 
             throw { ...mapped, originalError: error.message };
         }

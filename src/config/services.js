@@ -61,8 +61,10 @@ export default function initServices(redis) {
         notificationService,
     });
 
-    // Scheduler needs the payout service to execute due payouts
-    const schedulerService = new SchedulerService(payoutService);
+    // Scheduler needs the payout service to execute due payouts.
+    // Redis is passed so the scheduler can acquire a leader lock and prevent
+    // duplicate execution when multiple gateway instances are running.
+    const schedulerService = new SchedulerService(payoutService, redis);
 
     // AI Agent Service — orchestrates the multi-agent system
     const aiAgentService = new AIAgentService(groqClient);

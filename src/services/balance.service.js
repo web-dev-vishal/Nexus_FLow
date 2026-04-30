@@ -30,9 +30,12 @@ class BalanceService {
 
     // Copy the balance from MongoDB into Redis.
     // Called the first time we need a user's balance and it's not in Redis yet.
+    // TTL of 24 hours — ensures the cache is periodically re-validated against MongoDB
+    // and doesn't serve stale data indefinitely after a Redis flush or restore.
     async syncBalance(userId, balance) {
-        await this.redis.set(this._key(userId), balance.toString());
-        logger.debug("Balance synced to Redis", { userId, balance });
+        const ttlSeconds = parseInt(process.env.BALANCE_CACHE_TTL_SECONDS) || 86400; // 24h default
+        await this.redis.set(this._key(userId), balance.toString(), "EX", ttlSeconds);
+        logger.debug("Balance synced to Redis", { userId, balance, ttlSeconds });
     }
 
     // Quick check: does the user have enough money for this payout?
@@ -46,8 +49,12 @@ class BalanceService {
     // Deduct an amount from the user's balance atomically.
     // Uses a Lua script so the read-check-write happens as one operation in Redis.
     // This prevents two simultaneous payouts from both passing the balance check.
+    // The TTL is preserved — we use PTTL to read the remaining TTL and reapply it
+    // so the cache expiry isn't reset to infinity on every deduction.
     async deductBalance(userId, amount) {
-        // This Lua script runs entirely inside Redis — nothing can interrupt it
+        // This Lua script runs entirely inside Redis — nothing can interrupt it.
+        // PTTL returns the remaining TTL in milliseconds (-1 = no TTL, -2 = key missing).
+        // We reapply the TTL after the write so the cache expiry is preserved.
         const lua = `
             local current = redis.call("get", KEYS[1])
             if not current then return nil end
@@ -55,7 +62,12 @@ class BalanceService {
             local amt = tonumber(ARGV[1])
             if current < amt then return -1 end
             local newBal = current - amt
-            redis.call("set", KEYS[1], tostring(newBal))
+            local ttl = redis.call("pttl", KEYS[1])
+            if ttl > 0 then
+                redis.call("set", KEYS[1], tostring(newBal), "PX", ttl)
+            else
+                redis.call("set", KEYS[1], tostring(newBal))
+            end
             return newBal
         `;
 
@@ -74,12 +86,18 @@ class BalanceService {
 
     // Add an amount back to the user's balance — used when rolling back a failed payout.
     // Also atomic via Lua script for the same reason as deductBalance.
+    // TTL is preserved the same way.
     async addBalance(userId, amount) {
         const lua = `
             local current = redis.call("get", KEYS[1])
             if not current then return nil end
             local newBal = tonumber(current) + tonumber(ARGV[1])
-            redis.call("set", KEYS[1], tostring(newBal))
+            local ttl = redis.call("pttl", KEYS[1])
+            if ttl > 0 then
+                redis.call("set", KEYS[1], tostring(newBal), "PX", ttl)
+            else
+                redis.call("set", KEYS[1], tostring(newBal))
+            end
             return newBal
         `;
 

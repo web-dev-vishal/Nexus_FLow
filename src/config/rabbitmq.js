@@ -104,23 +104,37 @@ class RabbitMQConnection {
         // ── NexusFlow: Message events queue ──────────────────────────────────
         // Every new message is published here so workflow triggers can be evaluated
         // and analytics can be tracked without blocking the HTTP response.
+        // DLQ ensures failed event processing is captured for investigation.
+        await this.channel.assertExchange("dlx_message_events", "direct", { durable: true });
+        await this.channel.assertQueue("message_events_dlq", { durable: true });
+        await this.channel.bindQueue("message_events_dlq", "dlx_message_events", "message_events");
+
         await this.channel.assertQueue("message_events_queue", {
             durable: true,
             arguments: {
-                "x-message-ttl": 3600000,
+                "x-dead-letter-exchange":    "dlx_message_events",
+                "x-dead-letter-routing-key": "message_events",
+                "x-message-ttl":             3600000,
             },
         });
 
         // ── NexusFlow: Notification delivery queue ────────────────────────────
         // In-app and email notifications are queued here for async delivery.
+        // DLQ captures failed notifications so they can be retried or investigated.
+        await this.channel.assertExchange("dlx_notification", "direct", { durable: true });
+        await this.channel.assertQueue("notification_dlq", { durable: true });
+        await this.channel.bindQueue("notification_dlq", "dlx_notification", "notification");
+
         await this.channel.assertQueue("notification_queue", {
             durable: true,
             arguments: {
-                "x-message-ttl": 3600000,
+                "x-dead-letter-exchange":    "dlx_notification",
+                "x-dead-letter-routing-key": "notification",
+                "x-message-ttl":             3600000,
             },
         });
 
-        logger.info("RabbitMQ queues configured (payout + workflow + message events + notifications)");
+        logger.info("RabbitMQ queues configured (payout + workflow + message events + notifications — all with DLQs)");
     }
 
     async _initChannelPool() {

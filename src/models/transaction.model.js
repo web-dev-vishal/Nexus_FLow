@@ -112,21 +112,32 @@ transactionSchema.index({ userId: 1, createdAt: -1 });
 // "show me all failed transactions, newest first" (useful for monitoring)
 transactionSchema.index({ status: 1, createdAt: -1 });
 
-// ── Static method ─────────────────────────────────────────────────────────────
+// ── Static methods ────────────────────────────────────────────────────────────
+
 // Shortcut to find a transaction by our custom transactionId field
 transactionSchema.statics.findByTransactionId = function (transactionId) {
     return this.findOne({ transactionId });
 };
 
+// Atomically claim a transaction for processing.
+// Uses findOneAndUpdate with a status filter so only ONE worker can win the race.
+// Returns the updated document if the claim succeeded, or null if another worker
+// already claimed it (status was no longer "initiated").
+transactionSchema.statics.claimForProcessing = function (transactionId) {
+    return this.findOneAndUpdate(
+        { transactionId, status: "initiated" },   // only match if still "initiated"
+        {
+            $set: {
+                status: "processing",
+                "processingDetails.processingStartedAt": new Date(),
+            },
+        },
+        { new: true }  // return the updated document
+    );
+};
+
 // ── Instance methods ──────────────────────────────────────────────────────────
 // These update the transaction status and save it in one call
-
-// Called when the worker picks up the message and starts processing
-transactionSchema.methods.markAsProcessing = function () {
-    this.status = "processing";
-    this.processingDetails.processingStartedAt = new Date();
-    return this.save();
-};
 
 // Called when the worker successfully deducts the balance
 transactionSchema.methods.markAsCompleted = function () {

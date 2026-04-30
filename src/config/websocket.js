@@ -1,8 +1,13 @@
 // This file sets up the Socket.IO server for real-time communication.
 // When a payout is processed, we use this to instantly notify the user in their browser
 // without them having to refresh or poll the API.
+//
+// Multi-instance support: the Redis adapter is wired so that events emitted on
+// any gateway instance are forwarded to all connected clients, regardless of which
+// instance they are connected to.
 
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
 import { verifyAccessToken } from "../services/token.service.js";
 import logger from "../utils/logger.js";
 
@@ -18,7 +23,9 @@ class WebSocketServer {
 
     // Attach Socket.IO to the existing HTTP server.
     // Must be called after the HTTP server is created but before it starts listening.
-    initialize(httpServer) {
+    // redisClient is the main ioredis client — we duplicate it for pub/sub so the
+    // main client stays available for regular commands.
+    initialize(httpServer, redisClient) {
         this.io = new Server(httpServer, {
             cors: {
                 origin:      process.env.CORS_ORIGIN || (process.env.NODE_ENV === "production" ? false : "*"),
@@ -29,6 +36,18 @@ class WebSocketServer {
             pingInterval: 25000, // send a ping every 25s to keep the connection alive
             transports:   ["websocket", "polling"], // try WebSocket first, fall back to HTTP polling
         });
+
+        // Wire the Redis adapter so all gateway instances share Socket.IO state.
+        // Each instance gets its own pub/sub connection — never share the main client
+        // for pub/sub because it blocks all other commands while subscribed.
+        if (redisClient) {
+            const pubClient = redisClient.duplicate();
+            const subClient = redisClient.duplicate();
+            this.io.adapter(createAdapter(pubClient, subClient));
+            logger.info("Socket.IO Redis adapter configured (multi-instance ready)");
+        } else {
+            logger.warn("Socket.IO Redis adapter NOT configured — single-instance mode only");
+        }
 
         // Register all the event handlers
         this._setupHandlers();
@@ -97,15 +116,59 @@ class WebSocketServer {
         }
     }
 
-    // Clients can subscribe to additional channels (e.g. admin broadcast rooms)
+    // Clients can subscribe to additional channels (workspace, channel rooms).
+    // We validate that the socket is authenticated and that the requested channels
+    // follow the allowed naming patterns — prevents a client from subscribing to
+    // another user's private room by guessing the channel name.
     _handleSubscribe(socket, data) {
         try {
             const { channels } = data;
             if (!Array.isArray(channels)) return;
 
-            // Join each requested room
-            channels.forEach((ch) => socket.join(ch));
-            socket.emit("subscribed", { success: true, channels });
+            // Socket must be authenticated before subscribing to any room
+            if (!socket.userId) {
+                socket.emit("subscription_error", {
+                    success: false,
+                    error:   "Authenticate before subscribing to channels",
+                });
+                return;
+            }
+
+            // Allowed channel patterns:
+            //   user:<own-userId>          — personal events (already joined on auth)
+            //   workspace:<workspaceId>    — workspace-level events
+            //   channel:<channelId>        — channel messages
+            // Clients may NOT subscribe to another user's personal room.
+            const ALLOWED_PREFIXES = ["workspace:", "channel:"];
+            const ownUserRoom = `user:${socket.userId}`;
+
+            const safe = channels.filter((ch) => {
+                if (typeof ch !== "string" || ch.length > 200) return false;
+                // Allow own user room
+                if (ch === ownUserRoom) return true;
+                // Allow workspace and channel rooms
+                return ALLOWED_PREFIXES.some((prefix) => ch.startsWith(prefix));
+            });
+
+            const rejected = channels.filter((ch) => !safe.includes(ch));
+            if (rejected.length > 0) {
+                logger.warn("WebSocket subscription rejected — unauthorized channels", {
+                    socketId:  socket.id,
+                    userId:    socket.userId,
+                    rejected,
+                });
+            }
+
+            if (safe.length === 0) {
+                socket.emit("subscription_error", {
+                    success: false,
+                    error:   "No valid channels to subscribe to",
+                });
+                return;
+            }
+
+            safe.forEach((ch) => socket.join(ch));
+            socket.emit("subscribed", { success: true, channels: safe });
         } catch (error) {
             logger.error("WebSocket subscribe error:", error.message);
             socket.emit("subscription_error", { success: false, error: error.message });

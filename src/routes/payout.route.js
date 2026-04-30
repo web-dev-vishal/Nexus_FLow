@@ -7,6 +7,7 @@ import { validate } from "../validators/user.validate.js";
 import { createPayoutUserSchema, updatePayoutUserSchema, transactionHistoryQuerySchema, exportQuerySchema } from "../validators/payout-user.validate.js";
 import { walletOperationSchema } from "../validators/wallet.validate.js";
 import { isAuthenticated } from "../middleware/auth.middleware.js";
+import { idempotencyCheck } from "../middleware/idempotency.middleware.js";
 
 const createPayoutRouter = (payoutController, userRateLimiter) => {
     const router = express.Router();
@@ -53,10 +54,13 @@ const createPayoutRouter = (payoutController, userRateLimiter) => {
     // ── Create payout ─────────────────────────────────────────────────────────
 
     // POST /api/payout — create a new payout request
-    // Rate limiter → input validation → controller
+    // Rate limiter → idempotency check → input validation → controller
+    // X-Idempotency-Key header is optional but strongly recommended for clients
+    // that may retry on network failure — prevents duplicate payouts.
     router.post(
         "/",
         userRateLimiter,
+        idempotencyCheck,
         validatePayout,
         payoutController.createPayout
     );

@@ -1,19 +1,28 @@
 // Scheduler Service — polls the database every minute for payouts that are due.
 // When a scheduled payout's time arrives, we kick it off just like a normal payout.
-// This runs inside the API gateway process (started in app.js) — no separate process needed.
+//
+// Multi-instance safety: before each tick, we acquire a short-lived Redis lock
+// ("scheduler:leader"). Only the instance that wins the lock runs the tick.
+// All other instances skip silently. The lock TTL is slightly longer than the
+// poll interval so there's no gap between ticks.
 
 import ScheduledPayout from "../models/scheduled-payout.model.js";
 import logger from "../utils/logger.js";
 
 class SchedulerService {
-    constructor(payoutService) {
+    constructor(payoutService, redisClient) {
         // We need the payout service to actually execute the payouts
         this.payoutService = payoutService;
+        // Redis client for the distributed leader lock
+        this.redis = redisClient || null;
         this.timer = null;
         this.running = false;
 
         // How often to check for due payouts (default: every 60 seconds)
         this.intervalMs = parseInt(process.env.SCHEDULER_INTERVAL_MS) || 60000;
+
+        // Lock TTL = interval + 10s buffer so the lock never expires mid-tick
+        this.lockTtlMs = this.intervalMs + 10000;
     }
 
     // Start the polling loop
@@ -38,8 +47,23 @@ class SchedulerService {
         logger.info("Scheduler stopped");
     }
 
-    // One polling cycle — find all due payouts and process them
+    // One polling cycle — find all due payouts and process them.
+    // Acquires a Redis leader lock first so only one gateway instance runs per tick.
     async _tick() {
+        // Acquire a short-lived leader lock.
+        // NX = only set if key doesn't exist (atomic — only one instance wins).
+        // PX = auto-expire after lockTtlMs so the lock is always released even if we crash.
+        if (this.redis) {
+            const lockKey = "scheduler:leader";
+            const acquired = await this.redis.set(lockKey, "1", "PX", this.lockTtlMs, "NX");
+            if (acquired !== "OK") {
+                // Another instance is running this tick — skip silently
+                return;
+            }
+        } else {
+            logger.warn("Scheduler running without Redis lock — safe only in single-instance deployments");
+        }
+
         try {
             // Find all pending payouts where the scheduled time has passed
             // We use findOneAndUpdate to atomically claim each one — prevents two

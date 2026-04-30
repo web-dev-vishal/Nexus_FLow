@@ -45,7 +45,41 @@ class MessageConsumer {
 
         try {
             // Parse the JSON payload from the message body
-            payload = JSON.parse(msg.content.toString());
+            let raw;
+            try {
+                raw = JSON.parse(msg.content.toString());
+            } catch {
+                // Malformed JSON — dead-letter immediately, no point retrying
+                logger.error("Malformed message payload — routing to DLQ immediately", {
+                    content: msg.content.toString().slice(0, 200),
+                });
+                this.channel.nack(msg, false, false);
+                return;
+            }
+
+            // Validate required fields — a message missing these can never be processed
+            const required = ["transactionId", "userId", "amount", "currency"];
+            const missing = required.filter((k) => raw[k] === undefined || raw[k] === null);
+            if (missing.length > 0) {
+                logger.error("Message missing required fields — routing to DLQ", {
+                    missing,
+                    transactionId: raw.transactionId,
+                });
+                this.channel.nack(msg, false, false);
+                return;
+            }
+
+            // Type-check the amount — must be a positive number
+            if (typeof raw.amount !== "number" || raw.amount <= 0) {
+                logger.error("Message has invalid amount — routing to DLQ", {
+                    amount:        raw.amount,
+                    transactionId: raw.transactionId,
+                });
+                this.channel.nack(msg, false, false);
+                return;
+            }
+
+            payload = raw;
 
             logger.info("Processing message", {
                 transactionId: payload.transactionId,

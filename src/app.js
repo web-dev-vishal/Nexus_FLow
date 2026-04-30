@@ -12,6 +12,7 @@ import setupRoutes from "./config/routes.js";
 import setupWebSocketBridge from "./config/websocket-bridge.js";
 
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
+import { startQueueDepthPolling } from "./utils/metrics.js";
 
 import logger from "./utils/logger.js";
 
@@ -44,10 +45,14 @@ class Application {
 
         // HTTP server must be created before Socket.IO so they share the same port
         this.server = http.createServer(this.app);
-        this.io = websocketServer.initialize(this.server);
+        // Pass the Redis client so Socket.IO can use the Redis adapter for multi-instance support
+        this.io = websocketServer.initialize(this.server, this.redis);
 
         // Bridge Redis pub/sub → Socket.IO so the worker can push real-time events
         setupWebSocketBridge(this.redis);
+
+        // Start polling RabbitMQ queue depths for Prometheus metrics (every 30s)
+        this.queueDepthPoller = startQueueDepthPolling(() => rabbitmq.getChannel());
 
         // Start the scheduler — polls every minute for due scheduled payouts
         this.scheduler = services.scheduler;
@@ -72,6 +77,9 @@ class Application {
 
         // Stop the scheduler first so no new payouts are kicked off during shutdown
         if (this.scheduler) this.scheduler.stop();
+
+        // Stop the queue depth poller
+        if (this.queueDepthPoller) clearInterval(this.queueDepthPoller);
 
         // Close in reverse order of initialization
         if (this.io)     await websocketServer.close();
