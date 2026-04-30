@@ -8,12 +8,7 @@ import Notification from "../models/notification.model.js";
 import { assertMember } from "./workspace.service.js";
 import websocketServer from "../config/websocket.js";
 import logger from "../utils/logger.js";
-
-const createError = (statusCode, message) => {
-    const err = new Error(message);
-    err.statusCode = statusCode;
-    return err;
-};
+import { AppError } from "../utils/app-error.js";
 
 // ── Start or get a DM conversation ───────────────────────────────────────────
 // If a DM between these exact participants already exists, return it.
@@ -23,10 +18,10 @@ export async function getOrCreateDM(workspaceId, initiatorId, participantIds) {
     const allParticipants = [...new Set([initiatorId.toString(), ...participantIds.map(String)])];
 
     if (allParticipants.length < 2) {
-        throw createError(400, "A DM requires at least 2 participants");
+        throw new AppError("A DM requires at least 2 participants", 400, "INVALID_PARTICIPANTS");
     }
     if (allParticipants.length > 8) {
-        throw createError(400, "Group DMs are limited to 8 participants");
+        throw new AppError("Group DMs are limited to 8 participants", 400, "INVALID_PARTICIPANTS");
     }
 
     // Verify all participants are workspace members
@@ -86,7 +81,7 @@ export async function getDM(workspaceId, dmId, userId) {
         .populate("participants", "username email")
         .lean();
 
-    if (!dm) throw createError(404, "DM not found or you are not a participant");
+    if (!dm) throw new AppError("DM not found or you are not a participant", 404, "DM_NOT_FOUND");
     return dm;
 }
 
@@ -163,7 +158,7 @@ export async function getDMMessages(workspaceId, dmId, userId, { before, limit =
 // ── Close a DM (hide from sidebar) ───────────────────────────────────────────
 export async function closeDM(workspaceId, dmId, userId) {
     const dm = await DirectMessage.findOne({ _id: dmId, workspaceId, participants: userId });
-    if (!dm) throw createError(404, "DM not found");
+    if (!dm) throw new AppError("DM not found", 404, "DM_NOT_FOUND");
 
     if (!dm.closedBy.some(id => id.toString() === userId.toString())) {
         dm.closedBy.push(userId);

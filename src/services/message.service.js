@@ -9,12 +9,7 @@ import Notification from "../models/notification.model.js";
 import { assertMember } from "./workspace.service.js";
 import websocketServer from "../config/websocket.js";
 import logger from "../utils/logger.js";
-
-const createError = (statusCode, message) => {
-    const err = new Error(message);
-    err.statusCode = statusCode;
-    return err;
-};
+import { AppError } from "../utils/app-error.js";
 
 // Extract @userId mentions from message content
 // Format: @[username](userId) — similar to Slack's mention format
@@ -33,7 +28,7 @@ export async function sendMessage(workspaceId, channelId, senderId, { content, p
     await assertMember(workspaceId, senderId);
 
     const channel = await Channel.findOne({ _id: channelId, workspaceId, isArchived: false });
-    if (!channel) throw createError(404, "Channel not found");
+    if (!channel) throw new AppError("Channel not found", 404, "CHANNEL_NOT_FOUND");
 
     const mentions = extractMentions(content);
 
@@ -113,16 +108,16 @@ export async function getThread(workspaceId, channelId, messageId, userId) {
             .lean(),
     ]);
 
-    if (!root) throw createError(404, "Message not found");
+    if (!root) throw new AppError("Message not found", 404, "MESSAGE_NOT_FOUND");
     return { root, replies };
 }
 
 // ── Edit message ──────────────────────────────────────────────────────────────
 export async function editMessage(workspaceId, channelId, messageId, userId, newContent) {
     const message = await Message.findOne({ _id: messageId, channelId, isDeleted: false });
-    if (!message) throw createError(404, "Message not found");
+    if (!message) throw new AppError("Message not found", 404, "MESSAGE_NOT_FOUND");
     if (message.senderId.toString() !== userId.toString()) {
-        throw createError(403, "You can only edit your own messages");
+        throw new AppError("You can only edit your own messages", 403, "FORBIDDEN");
     }
 
     // Keep edit history (last 5 edits)
@@ -144,7 +139,7 @@ export async function editMessage(workspaceId, channelId, messageId, userId, new
 // ── Delete message ────────────────────────────────────────────────────────────
 export async function deleteMessage(workspaceId, channelId, messageId, userId) {
     const message = await Message.findOne({ _id: messageId, channelId });
-    if (!message) throw createError(404, "Message not found");
+    if (!message) throw new AppError("Message not found", 404, "MESSAGE_NOT_FOUND");
 
     // Users can delete their own messages; admins can delete any message
     const member = await assertMember(workspaceId, userId);
@@ -152,7 +147,7 @@ export async function deleteMessage(workspaceId, channelId, messageId, userId) {
     const isAdmin = ["owner", "admin"].includes(member.role);
 
     if (!isOwn && !isAdmin) {
-        throw createError(403, "You can only delete your own messages");
+        throw new AppError("You can only delete your own messages", 403, "FORBIDDEN");
     }
 
     // Soft delete — keep the record, hide the content
@@ -169,13 +164,13 @@ export async function addReaction(workspaceId, channelId, messageId, userId, emo
     await assertMember(workspaceId, userId);
 
     const message = await Message.findOne({ _id: messageId, channelId, isDeleted: false });
-    if (!message) throw createError(404, "Message not found");
+    if (!message) throw new AppError("Message not found", 404, "MESSAGE_NOT_FOUND");
 
     const existing = message.reactions.find(r => r.emoji === emoji);
     if (existing) {
         // Already reacted with this emoji — check if this user already reacted
         if (existing.userIds.some(id => id.toString() === userId.toString())) {
-            throw createError(409, "You already reacted with this emoji");
+            throw new AppError("You already reacted with this emoji", 409, "ALREADY_REACTED");
         }
         existing.userIds.push(userId);
         existing.count++;
@@ -195,10 +190,10 @@ export async function removeReaction(workspaceId, channelId, messageId, userId, 
     await assertMember(workspaceId, userId);
 
     const message = await Message.findOne({ _id: messageId, channelId, isDeleted: false });
-    if (!message) throw createError(404, "Message not found");
+    if (!message) throw new AppError("Message not found", 404, "MESSAGE_NOT_FOUND");
 
     const reaction = message.reactions.find(r => r.emoji === emoji);
-    if (!reaction) throw createError(404, "Reaction not found");
+    if (!reaction) throw new AppError("Reaction not found", 404, "REACTION_NOT_FOUND");
 
     reaction.userIds = reaction.userIds.filter(id => id.toString() !== userId.toString());
     reaction.count   = reaction.userIds.length;
@@ -220,10 +215,10 @@ export async function bookmarkMessage(workspaceId, messageId, userId) {
     await assertMember(workspaceId, userId);
 
     const message = await Message.findById(messageId);
-    if (!message) throw createError(404, "Message not found");
+    if (!message) throw new AppError("Message not found", 404, "MESSAGE_NOT_FOUND");
 
     const alreadyBookmarked = message.bookmarkedBy.some(id => id.toString() === userId.toString());
-    if (alreadyBookmarked) throw createError(409, "Already bookmarked");
+    if (alreadyBookmarked) throw new AppError("Already bookmarked", 409, "ALREADY_BOOKMARKED");
 
     message.bookmarkedBy.push(userId);
     await message.save();

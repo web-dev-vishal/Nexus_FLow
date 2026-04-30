@@ -3,12 +3,7 @@
 // Notifications are created by message.service.js and dm.service.js.
 
 import Notification from "../models/notification.model.js";
-
-const createError = (statusCode, message) => {
-    const err = new Error(message);
-    err.statusCode = statusCode;
-    return err;
-};
+import { AppError } from "../utils/app-error.js";
 
 // ── Get notifications for a user ──────────────────────────────────────────────
 export async function getNotifications(userId, { page = 1, limit = 20, unreadOnly = false } = {}) {
@@ -47,7 +42,7 @@ export async function markAsRead(userId, notificationIds) {
 // ── Delete a notification ─────────────────────────────────────────────────────
 export async function deleteNotification(userId, notificationId) {
     const result = await Notification.findOneAndDelete({ _id: notificationId, userId });
-    if (!result) throw createError(404, "Notification not found");
+    if (!result) throw new AppError("Notification not found", 404, "NOTIFICATION_NOT_FOUND");
 }
 
 // ── Get unread count ──────────────────────────────────────────────────────────
@@ -65,7 +60,7 @@ export async function getPreferences(userId, workspaceId) {
         .select("notifications")
         .lean();
 
-    if (!member) throw createError(404, "Not a member of this workspace");
+    if (!member) throw new AppError("Not a member of this workspace", 404, "NOT_A_MEMBER");
     return member.notifications;
 }
 
@@ -86,6 +81,6 @@ export async function updatePreferences(userId, workspaceId, prefs) {
         { new: true }
     ).select("notifications");
 
-    if (!member) throw createError(404, "Not a member of this workspace");
+    if (!member) throw new AppError("Not a member of this workspace", 404, "NOT_A_MEMBER");
     return member.notifications;
 }

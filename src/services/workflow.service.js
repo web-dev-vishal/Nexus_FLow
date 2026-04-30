@@ -7,12 +7,7 @@ import Workflow from "../models/workflow.model.js";
 import WorkflowExecution from "../models/workflow-execution.model.js";
 import { assertMember, assertRole } from "./workspace.service.js";
 import logger from "../utils/logger.js";
-
-const createError = (statusCode, message) => {
-    const err = new Error(message);
-    err.statusCode = statusCode;
-    return err;
-};
+import { AppError } from "../utils/app-error.js";
 
 // ── Create workflow ───────────────────────────────────────────────────────────
 export async function createWorkflow(workspaceId, userId, data) {
@@ -59,7 +54,7 @@ export async function getWorkflow(workspaceId, workflowId, userId) {
         .populate("createdBy", "username")
         .lean();
 
-    if (!workflow) throw createError(404, "Workflow not found");
+    if (!workflow) throw new AppError("Workflow not found", 404, "WORKFLOW_NOT_FOUND");
     return workflow;
 }
 
@@ -78,7 +73,7 @@ export async function updateWorkflow(workspaceId, workflowId, userId, updates) {
         { new: true, runValidators: true }
     );
 
-    if (!workflow) throw createError(404, "Workflow not found");
+    if (!workflow) throw new AppError("Workflow not found", 404, "WORKFLOW_NOT_FOUND");
     return workflow;
 }
 
@@ -87,13 +82,13 @@ export async function deleteWorkflow(workspaceId, workflowId, userId) {
     await assertRole(workspaceId, userId, ["owner", "admin", "member"]);
 
     const workflow = await Workflow.findOne({ _id: workflowId, workspaceId });
-    if (!workflow) throw createError(404, "Workflow not found");
+    if (!workflow) throw new AppError("Workflow not found", 404, "WORKFLOW_NOT_FOUND");
 
     // Only the creator or an admin can delete
     const isCreator = workflow.createdBy.toString() === userId.toString();
     const member = await assertMember(workspaceId, userId);
     if (!isCreator && !["owner", "admin"].includes(member.role)) {
-        throw createError(403, "Only the workflow creator or an admin can delete this workflow");
+        throw new AppError("Only the workflow creator or an admin can delete this workflow", 403, "INSUFFICIENT_ROLE");
     }
 
     await Workflow.findByIdAndDelete(workflowId);
@@ -109,7 +104,7 @@ export async function setWorkflowEnabled(workspaceId, workflowId, userId, enable
         { new: true }
     );
 
-    if (!workflow) throw createError(404, "Workflow not found");
+    if (!workflow) throw new AppError("Workflow not found", 404, "WORKFLOW_NOT_FOUND");
     return workflow;
 }
 
@@ -119,7 +114,7 @@ export async function setWorkflowEnabled(workspaceId, workflowId, userId, enable
 export async function triggerWorkflow(workspaceId, workflowId, userId, payload = {}, publisher) {
     const workflow = await getWorkflow(workspaceId, workflowId, userId);
 
-    if (!workflow.isEnabled) throw createError(400, "Workflow is disabled");
+    if (!workflow.isEnabled) throw new AppError("Workflow is disabled", 400, "WORKFLOW_DISABLED");
 
     const execution = await WorkflowExecution.create({
         workflowId,
@@ -165,7 +160,7 @@ export async function getExecution(workspaceId, executionId, userId) {
     await assertMember(workspaceId, userId);
 
     const execution = await WorkflowExecution.findOne({ _id: executionId, workspaceId }).lean();
-    if (!execution) throw createError(404, "Execution not found");
+    if (!execution) throw new AppError("Execution not found", 404, "EXECUTION_NOT_FOUND");
     return execution;
 }
 
@@ -174,14 +169,14 @@ export async function retryExecution(workspaceId, executionId, userId, publisher
     const execution = await getExecution(workspaceId, executionId, userId);
 
     if (execution.status !== "failed") {
-        throw createError(400, "Only failed executions can be retried");
+        throw new AppError("Only failed executions can be retried", 400, "INVALID_STATE");
     }
     if (execution.retryCount >= execution.maxRetries) {
-        throw createError(400, "Maximum retry attempts reached");
+        throw new AppError("Maximum retry attempts reached", 400, "MAX_RETRIES_REACHED");
     }
 
     const workflow = await Workflow.findById(execution.workflowId).lean();
-    if (!workflow) throw createError(404, "Workflow not found");
+    if (!workflow) throw new AppError("Workflow not found", 404, "WORKFLOW_NOT_FOUND");
 
     await WorkflowExecution.findByIdAndUpdate(executionId, {
         status:     "queued",

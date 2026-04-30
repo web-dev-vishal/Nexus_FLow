@@ -1,830 +1,885 @@
 {
   "info": {
-    "_postman_id": "nexusflow-api-collection",
     "name": "NexusFlow API",
-    "description": "Complete API collection for NexusFlow — AI-powered workflow automation and team collaboration platform built on Node.js, Express, MongoDB, Redis, RabbitMQ, Socket.IO, and PASETO auth.\n\n**Setup:**\n1. Set `baseUrl` variable to `http://localhost:5000`\n2. Register a user, then login to get `accessToken` and `refreshToken`\n3. Set those as collection variables\n4. All protected routes use `Bearer {{accessToken}}` automatically\n\n**Variable list:**\n- `baseUrl` — API base URL\n- `accessToken` — PASETO access token (15 min TTL)\n- `refreshToken` — PASETO refresh token (30 days)\n- `workspaceId` — active workspace ID\n- `channelId` — active channel ID\n- `messageId` — active message ID\n- `dmId` — active DM conversation ID\n- `workflowId` — active workflow ID\n- `executionId` — workflow execution ID\n- `userId` — payout user ID\n- `transactionId` — payout transaction ID\n- `webhookId` — active webhook ID",
+    "description": "Complete API collection for NexusFlow. Flow: Health → Register → Verify Email → Login (auto-saves tokens) → use all other endpoints.\n\nVariables auto-saved by test scripts: accessToken, refreshToken, workspaceId, channelId, messageId, dmId, workflowId, executionId, webhookId, transactionId.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl",       "value": "http://localhost:5000", "type": "string" },
-    { "key": "accessToken",   "value": "",                      "type": "string" },
-    { "key": "refreshToken",  "value": "",                      "type": "string" },
-    { "key": "workspaceId",   "value": "",                      "type": "string" },
-    { "key": "channelId",     "value": "",                      "type": "string" },
-    { "key": "messageId",     "value": "",                      "type": "string" },
-    { "key": "dmId",          "value": "",                      "type": "string" },
-    { "key": "workflowId",    "value": "",                      "type": "string" },
-    { "key": "executionId",   "value": "",                      "type": "string" },
-    { "key": "userId",        "value": "",                      "type": "string" },
-    { "key": "transactionId", "value": "",                      "type": "string" },
-    { "key": "webhookId",     "value": "",                      "type": "string" },
-    { "key": "email",         "value": "test@example.com",      "type": "string" }
+    { "key": "baseUrl",      "value": "http://localhost:5000",      "type": "string" },
+    { "key": "email",        "value": "testuser@example.com",       "type": "string" },
+    { "key": "accessToken",  "value": "",                           "type": "string" },
+    { "key": "refreshToken", "value": "",                           "type": "string" },
+    { "key": "workspaceId",  "value": "",                           "type": "string" },
+    { "key": "channelId",    "value": "",                           "type": "string" },
+    { "key": "messageId",    "value": "",                           "type": "string" },
+    { "key": "dmId",         "value": "",                           "type": "string" },
+    { "key": "workflowId",   "value": "",                           "type": "string" },
+    { "key": "executionId",  "value": "",                           "type": "string" },
+    { "key": "webhookId",    "value": "",                           "type": "string" },
+    { "key": "transactionId","value": "",                           "type": "string" }
   ],
   "auth": {
     "type": "bearer",
     "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
   },
   "item": [
-
     {
-      "name": "01 — Auth",
-      "description": "User registration, login, token management. Run in order: Register → Verify Email → Login → use accessToken for everything else.",
+      "name": "00 - Health",
+      "description": "Health check endpoints. No auth required.",
+      "item": [
+        {
+          "name": "Basic Health",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/health","host":["{{baseUrl}}"],"path":["api","health"]} }
+        },
+        {
+          "name": "Liveness Probe",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/health/live","host":["{{baseUrl}}"],"path":["api","health","live"]} }
+        },
+        {
+          "name": "Readiness Probe",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/health/ready","host":["{{baseUrl}}"],"path":["api","health","ready"]} }
+        },
+        {
+          "name": "Detailed Health",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/health/detailed","host":["{{baseUrl}}"],"path":["api","health","detailed"]} }
+        },
+        {
+          "name": "API Info",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api","host":["{{baseUrl}}"],"path":["api"]} }
+        },
+        {
+          "name": "Prometheus Metrics",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/metrics","host":["{{baseUrl}}"],"path":["metrics"]} }
+        }
+      ]
+    },
+    {
+      "name": "01 - Auth",
+      "description": "Register → Verify Email → Login. Login auto-saves accessToken and refreshToken.",
       "item": [
         {
           "name": "Register",
-          "event": [{ "listen": "test", "script": { "exec": ["pm.test('Status 201', () => pm.response.to.have.status(201));"] } }],
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api","auth","register"] },
-            "body": { "mode": "raw", "raw": "{\n  \"username\": \"testuser\",\n  \"email\": \"{{email}}\",\n  \"password\": \"Password123!\"\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":["pm.test('Status 201', () => pm.response.to.have.status(201));"]}}],
+          "request": { "auth": {"type":"noauth"}, "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/register","host":["{{baseUrl}}"],"path":["api","auth","register"]},
+            "body": {"mode":"raw","raw":"{\n  \"username\": \"testuser\",\n  \"email\": \"{{email}}\",\n  \"password\": \"Password123!\"\n}"} }
         },
         {
-          "name": "Verify Email (Bearer = verification token from email)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer PASTE_VERIFY_TOKEN_FROM_EMAIL" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/verify-email", "host": ["{{baseUrl}}"], "path": ["api","auth","verify-email"] }
-          }
+          "name": "Verify Email (token from email link)",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "header": [{"key":"Authorization","value":"Bearer PASTE_VERIFY_TOKEN_HERE"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/verify-email","host":["{{baseUrl}}"],"path":["api","auth","verify-email"]} }
         },
         {
           "name": "Resend Verification Email",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/resend-verification", "host": ["{{baseUrl}}"], "path": ["api","auth","resend-verification"] },
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\"\n}" }
-          }
+          "request": { "auth": {"type":"noauth"}, "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/resend-verification","host":["{{baseUrl}}"],"path":["api","auth","resend-verification"]},
+            "body": {"mode":"raw","raw":"{\n  \"email\": \"{{email}}\"\n}"} }
         },
         {
           "name": "Login",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 200) {",
-              "  const b = pm.response.json();",
-              "  pm.collectionVariables.set('accessToken', b.accessToken);",
-              "  pm.collectionVariables.set('refreshToken', b.refreshToken);",
-              "  pm.test('Got tokens', () => pm.expect(b.accessToken).to.be.a('string'));",
-              "}"
-            ]}
-          }],
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] },
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"Password123!\"\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 200) {",
+            "  const b = pm.response.json();",
+            "  pm.collectionVariables.set('accessToken', b.accessToken);",
+            "  pm.collectionVariables.set('refreshToken', b.refreshToken);",
+            "  pm.test('Got tokens', () => pm.expect(b.accessToken).to.be.a('string'));",
+            "}"
+          ]}}],
+          "request": { "auth": {"type":"noauth"}, "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/login","host":["{{baseUrl}}"],"path":["api","auth","login"]},
+            "body": {"mode":"raw","raw":"{\n  \"email\": \"{{email}}\",\n  \"password\": \"Password123!\"\n}"} }
         },
         {
           "name": "Get Profile",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/auth/profile", "host": ["{{baseUrl}}"], "path": ["api","auth","profile"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/auth/profile","host":["{{baseUrl}}"],"path":["api","auth","profile"]} }
         },
         {
           "name": "Update Profile",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/profile", "host": ["{{baseUrl}}"], "path": ["api","auth","profile"] },
-            "body": { "mode": "raw", "raw": "{\n  \"username\": \"updateduser\"\n}" }
-          }
+          "request": { "method": "PUT",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/profile","host":["{{baseUrl}}"],"path":["api","auth","profile"]},
+            "body": {"mode":"raw","raw":"{\n  \"username\": \"updateduser\"\n}"} }
         },
         {
           "name": "Refresh Access Token",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 200) {",
-              "  pm.collectionVariables.set('accessToken', pm.response.json().accessToken);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{refreshToken}}" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/refresh-token", "host": ["{{baseUrl}}"], "path": ["api","auth","refresh-token"] }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 200) {",
+            "  pm.collectionVariables.set('accessToken', pm.response.json().accessToken);",
+            "}"
+          ]}}],
+          "request": { "auth": {"type":"noauth"}, "method": "POST",
+            "header": [{"key":"Authorization","value":"Bearer {{refreshToken}}"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/refresh-token","host":["{{baseUrl}}"],"path":["api","auth","refresh-token"]} }
         },
         {
           "name": "Forgot Password (sends OTP)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["api","auth","forgot-password"] },
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\"\n}" }
-          }
+          "request": { "auth": {"type":"noauth"}, "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/forgot-password","host":["{{baseUrl}}"],"path":["api","auth","forgot-password"]},
+            "body": {"mode":"raw","raw":"{\n  \"email\": \"{{email}}\"\n}"} }
         },
         {
           "name": "Verify OTP",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/verify-otp/{{email}}", "host": ["{{baseUrl}}"], "path": ["api","auth","verify-otp","{{email}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"otp\": \"123456\"\n}" }
-          }
+          "request": { "auth": {"type":"noauth"}, "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/verify-otp/{{email}}","host":["{{baseUrl}}"],"path":["api","auth","verify-otp","{{email}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"otp\": \"123456\"\n}"} }
         },
         {
           "name": "Change Password",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/auth/change-password/{{email}}", "host": ["{{baseUrl}}"], "path": ["api","auth","change-password","{{email}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"newPassword\": \"NewPassword123!\"\n}" }
-          }
+          "request": { "auth": {"type":"noauth"}, "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/auth/change-password/{{email}}","host":["{{baseUrl}}"],"path":["api","auth","change-password","{{email}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"newPassword\": \"NewPassword123!\",\n  \"confirmPassword\": \"NewPassword123!\"\n}"} }
         },
         {
           "name": "Logout",
-          "request": {
-            "method": "POST",
-            "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api","auth","logout"] }
-          }
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/auth/logout","host":["{{baseUrl}}"],"path":["api","auth","logout"]} }
         }
       ]
     },
-
     {
-      "name": "02 — Workspaces",
-      "description": "Create and manage workspaces. Create a workspace first — all channels, DMs, and workflows live inside one.",
+      "name": "02 - Workspaces",
+      "description": "Create workspace first — workspaceId is auto-saved.",
       "item": [
         {
           "name": "Create Workspace",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('workspaceId', pm.response.json().workspace._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces", "host": ["{{baseUrl}}"], "path": ["api","workspaces"] },
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"My Team\",\n  \"description\": \"Our main workspace\",\n  \"icon\": \"🚀\"\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 201) {",
+            "  pm.collectionVariables.set('workspaceId', pm.response.json().workspace._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces","host":["{{baseUrl}}"],"path":["api","workspaces"]},
+            "body": {"mode":"raw","raw":"{\n  \"name\": \"My Team\",\n  \"description\": \"Our main workspace\",\n  \"icon\": \"\"\n}"} }
         },
         {
           "name": "List My Workspaces",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces", "host": ["{{baseUrl}}"], "path": ["api","workspaces"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces","host":["{{baseUrl}}"],"path":["api","workspaces"]} }
         },
         {
           "name": "Get Workspace",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}"]} }
         },
         {
           "name": "Update Workspace",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"My Team Updated\",\n  \"description\": \"Updated description\"\n}" }
-          }
+          "request": { "method": "PUT",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"name\": \"My Team Updated\",\n  \"description\": \"Updated description\"\n}"} }
         },
         {
           "name": "Invite Member",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/invite", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","invite"] },
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"colleague@example.com\",\n  \"role\": \"member\"\n}" }
-          }
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/invite","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","invite"]},
+            "body": {"mode":"raw","raw":"{\n  \"email\": \"colleague@example.com\",\n  \"role\": \"member\"\n}"} }
         },
         {
           "name": "List Members",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/members?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","members"], "query": [{"key":"page","value":"1"},{"key":"limit","value":"20"}] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/members?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","members"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
         },
         {
           "name": "Change Member Role",
-          "request": {
-            "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/members/MEMBER_USER_ID/role", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","members","MEMBER_USER_ID","role"] },
-            "body": { "mode": "raw", "raw": "{\n  \"role\": \"admin\"\n}" }
-          }
+          "request": { "method": "PATCH",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/members/MEMBER_USER_ID/role","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","members","MEMBER_USER_ID","role"]},
+            "body": {"mode":"raw","raw":"{\n  \"role\": \"admin\"\n}"} }
         },
         {
           "name": "Remove Member",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/members/MEMBER_USER_ID", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","members","MEMBER_USER_ID"] }
-          }
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/members/MEMBER_USER_ID","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","members","MEMBER_USER_ID"]} }
         },
         {
           "name": "Workspace Stats",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/stats", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","stats"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/stats","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","stats"]} }
         },
         {
           "name": "Delete Workspace",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}"] }
-          }
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}"]} }
         }
       ]
     },
-
     {
-      "name": "03 — Channels",
-      "description": "Channels live inside a workspace. #general and #random are created automatically. Create more as needed.",
+      "name": "03 - Channels",
+      "description": "Channels live inside a workspace. channelId is auto-saved on create.",
       "item": [
         {
           "name": "Create Channel",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('channelId', pm.response.json().channel._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels"] },
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"engineering\",\n  \"description\": \"Engineering team channel\",\n  \"type\": \"public\"\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 201) {",
+            "  pm.collectionVariables.set('channelId', pm.response.json().channel._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels"]},
+            "body": {"mode":"raw","raw":"{\n  \"name\": \"engineering\",\n  \"description\": \"Engineering team channel\",\n  \"type\": \"public\"\n}"} }
         },
         {
           "name": "List Channels",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels"]} }
         },
         {
           "name": "Get Channel",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}"]} }
         },
         {
           "name": "Update Channel",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated description\",\n  \"topic\": \"Current sprint: v2.0 release\"\n}" }
-          }
+          "request": { "method": "PUT",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"description\": \"Updated description\",\n  \"topic\": \"Current sprint: v2.0\"\n}"} }
         },
         {
           "name": "Join Channel",
-          "request": {
-            "method": "POST",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/join", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","join"] }
-          }
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/join","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","join"]} }
         },
         {
           "name": "Leave Channel",
-          "request": {
-            "method": "POST",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/leave", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","leave"] }
-          }
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/leave","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","leave"]} }
         },
         {
           "name": "Search Messages in Channel",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/search?q=hello&limit=20", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","search"], "query": [{"key":"q","value":"hello"},{"key":"limit","value":"20"}] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/search?q=hello&limit=20","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","search"],"query":[{"key":"q","value":"hello"},{"key":"limit","value":"20"}]} }
         },
         {
           "name": "Pin Message",
-          "request": {
-            "method": "POST",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/pin/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","pin","{{messageId}}"] }
-          }
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/pin/{{messageId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","pin","{{messageId}}"]} }
         },
         {
           "name": "Unpin Message",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/pin/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","pin","{{messageId}}"] }
-          }
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/pin/{{messageId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","pin","{{messageId}}"]} }
         },
         {
           "name": "Delete Channel",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}"] }
-          }
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}"]} }
         }
       ]
     },
-
     {
-      "name": "04 — Messages",
-      "description": "Send, edit, delete, react to, and thread messages inside channels.",
+      "name": "04 - Messages",
+      "description": "Send, edit, delete, react, thread, bookmark messages. messageId auto-saved on send.",
       "item": [
         {
           "name": "Send Message",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('messageId', pm.response.json().message._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages"] },
-            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hello team! 👋\"\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 201) {",
+            "  pm.collectionVariables.set('messageId', pm.response.json().message._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages"]},
+            "body": {"mode":"raw","raw":"{\n  \"content\": \"Hello team! \"\n}"} }
         },
         {
-          "name": "List Messages (paginated)",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages?limit=50", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages"], "query": [{"key":"limit","value":"50"}] }
-          }
+          "name": "List Messages",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages?limit=50","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages"],"query":[{"key":"limit","value":"50"}]} }
         },
         {
-          "name": "List Messages (cursor pagination — load older)",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages?before={{messageId}}&limit=50", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages"], "query": [{"key":"before","value":"{{messageId}}"},{"key":"limit","value":"50"}] }
-          }
+          "name": "List Messages (cursor pagination)",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages?before={{messageId}}&limit=50","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages"],"query":[{"key":"before","value":"{{messageId}}"},{"key":"limit","value":"50"}]} }
         },
         {
           "name": "Get Single Message",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}"]} }
         },
         {
           "name": "Edit Message",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hello team! (edited) 👋\"\n}" }
-          }
+          "request": { "method": "PUT",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"content\": \"Hello team! (edited)\"\n}"} }
         },
         {
           "name": "Delete Message",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}"] }
-          }
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}"]} }
         },
         {
           "name": "Add Reaction",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/react", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","react"] },
-            "body": { "mode": "raw", "raw": "{\n  \"emoji\": \"👍\"\n}" }
-          }
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/react","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","react"]},
+            "body": {"mode":"raw","raw":"{\n  \"emoji\": \"+1\"\n}"} }
         },
         {
           "name": "Remove Reaction",
-          "request": {
-            "method": "DELETE",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/react", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","react"] },
-            "body": { "mode": "raw", "raw": "{\n  \"emoji\": \"👍\"\n}" }
-          }
+          "request": { "method": "DELETE",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/react","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","react"]},
+            "body": {"mode":"raw","raw":"{\n  \"emoji\": \"+1\"\n}"} }
         },
         {
           "name": "Reply in Thread",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/thread", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","thread"] },
-            "body": { "mode": "raw", "raw": "{\n  \"content\": \"This is a thread reply!\"\n}" }
-          }
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/thread","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","thread"]},
+            "body": {"mode":"raw","raw":"{\n  \"content\": \"This is a thread reply!\"\n}"} }
         },
         {
-          "name": "Get Thread",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/thread", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","thread"] }
-          }
+          "name": "Get Thread Replies",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/thread","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","thread"]} }
         },
         {
           "name": "Bookmark Message",
-          "request": {
-            "method": "POST",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/bookmark", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","bookmark"] }
-          }
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/bookmark","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","bookmark"]} }
         },
         {
-          "name": "Get My Bookmarks",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/bookmarks", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","bookmarks"] }
-          }
+          "name": "Remove Bookmark",
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/{{messageId}}/bookmark","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","{{messageId}}","bookmark"]} }
         },
         {
-          "name": "Global Workspace Search",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/channels/{{channelId}}/messages/search?q=hello&limit=20", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","channels","{{channelId}}","messages","search"], "query": [{"key":"q","value":"hello"},{"key":"limit","value":"20"}] }
-          }
+          "name": "Get Bookmarks",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/bookmarks?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","bookmarks"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
+        },
+        {
+          "name": "Search Workspace",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/search?q=hello&limit=20","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","search"],"query":[{"key":"q","value":"hello"},{"key":"limit","value":"20"}]} }
         }
       ]
     },
-
     {
-      "name": "05 — Direct Messages",
-      "description": "One-on-one and group DM conversations. Create a conversation first — all DM messages live inside one. Run in order: Create Conversation → Send Message → use dmId for everything else.",
+      "name": "05 - Direct Messages",
+      "description": "DMs nested under /api/workspaces/:workspaceId/dms. dmId auto-saved on create.",
       "item": [
         {
-          "name": "Create DM Conversation",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('dmId', pm.response.json().conversation._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm"] },
-            "body": { "mode": "raw", "raw": "{\n  \"participantIds\": [\"RECIPIENT_USER_ID\"]\n}" }
-          }
+          "name": "Start DM Conversation",
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 201) {",
+            "  pm.collectionVariables.set('dmId', pm.response.json().conversation._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/dms","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","dms"]},
+            "body": {"mode":"raw","raw":"{\n  \"participantIds\": [\"RECIPIENT_USER_ID\"]\n}"} }
         },
         {
           "name": "List DM Conversations",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/dms","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","dms"]} }
         },
         {
           "name": "Get DM Conversation",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/dms/{{dmId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","dms","{{dmId}}"]} }
+        },
+        {
+          "name": "Get DM Members",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/dms/{{dmId}}/members","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","dms","{{dmId}}","members"]} }
         },
         {
           "name": "Send DM Message",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('messageId', pm.response.json().message._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/messages", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","messages"] },
-            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hey! 👋\"\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 201) {",
+            "  pm.collectionVariables.set('messageId', pm.response.json().message._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/dms/{{dmId}}/messages","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","dms","{{dmId}}","messages"]},
+            "body": {"mode":"raw","raw":"{\n  \"content\": \"Hey! \"\n}"} }
         },
         {
-          "name": "List DM Messages (paginated)",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/messages?limit=50", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","messages"], "query": [{"key":"limit","value":"50"}] }
-          }
+          "name": "Get DM Messages",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/dms/{{dmId}}/messages?limit=50","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","dms","{{dmId}}","messages"],"query":[{"key":"limit","value":"50"}]} }
         },
         {
-          "name": "List DM Messages (cursor pagination — load older)",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/messages?before={{messageId}}&limit=50", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","messages"], "query": [{"key":"before","value":"{{messageId}}"},{"key":"limit","value":"50"}] }
-          }
-        },
-        {
-          "name": "Edit DM Message",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","messages","{{messageId}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Hey! (edited) 👋\"\n}" }
-          }
-        },
-        {
-          "name": "Delete DM Message",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","messages","{{messageId}}"] }
-          }
-        },
-        {
-          "name": "Add Reaction to DM Message",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/messages/{{messageId}}/react", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","messages","{{messageId}}","react"] },
-            "body": { "mode": "raw", "raw": "{\n  \"emoji\": \"❤️\"\n}" }
-          }
-        },
-        {
-          "name": "Remove Reaction from DM Message",
-          "request": {
-            "method": "DELETE",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/messages/{{messageId}}/react", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","messages","{{messageId}}","react"] },
-            "body": { "mode": "raw", "raw": "{\n  \"emoji\": \"❤️\"\n}" }
-          }
-        },
-        {
-          "name": "Mark DM as Read",
-          "request": {
-            "method": "POST",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}/read", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}","read"] }
-          }
-        },
-        {
-          "name": "Delete DM Conversation",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/dm/{{dmId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","dm","{{dmId}}"] }
-          }
+          "name": "Close DM Conversation",
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/dms/{{dmId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","dms","{{dmId}}"]} }
         }
       ]
     },
-
     {
-      "name": "06 — Workflows",
-      "description": "AI-powered workflow automation. Create a workflow → add trigger & actions → activate → execute. Use workflowId and executionId for subsequent requests.",
+      "name": "06 - Workflows",
+      "description": "Workflow automation. workflowId and executionId auto-saved.",
       "item": [
         {
           "name": "Create Workflow",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('workflowId', pm.response.json().workflow._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows"] },
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Member Onboarding\",\n  \"description\": \"Automatically welcome new workspace members\",\n  \"trigger\": {\n    \"type\": \"member_joined\",\n    \"config\": {}\n  },\n  \"actions\": [\n    {\n      \"type\": \"send_message\",\n      \"config\": {\n        \"channelId\": \"{{channelId}}\",\n        \"content\": \"Welcome to the team, {{user.username}}! 🎉\"\n      }\n    }\n  ]\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 201) {",
+            "  pm.collectionVariables.set('workflowId', pm.response.json().workflow._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows"]},
+            "body": {"mode":"raw","raw":"{\n  \"name\": \"Welcome New Members\",\n  \"description\": \"Posts a welcome message when someone joins\",\n  \"trigger\": {\n    \"type\": \"manual\",\n    \"config\": {}\n  },\n  \"nodes\": [\n    {\n      \"id\": \"node_1\",\n      \"type\": \"send_message\",\n      \"name\": \"Post to Channel\",\n      \"config\": {\n        \"channelId\": \"{{channelId}}\",\n        \"content\": \"Welcome to the team!\"\n      }\n    }\n  ]\n}"} }
         },
         {
           "name": "List Workflows",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows"], "query": [{"key":"page","value":"1"},{"key":"limit","value":"20"}] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
         },
         {
           "name": "Get Workflow",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}"]} }
         },
         {
           "name": "Update Workflow",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Member Onboarding (updated)\",\n  \"description\": \"Updated description\"\n}" }
-          }
+          "request": { "method": "PUT",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"name\": \"Welcome New Members (updated)\"\n}"} }
         },
         {
-          "name": "Activate Workflow",
-          "request": {
-            "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/activate", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","activate"] }
-          }
+          "name": "Enable Workflow",
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/enable","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","enable"]} }
         },
         {
-          "name": "Deactivate Workflow",
-          "request": {
-            "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/deactivate", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","deactivate"] }
-          }
+          "name": "Disable Workflow",
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/disable","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","disable"]} }
         },
         {
-          "name": "Execute Workflow (manual trigger)",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 200 || pm.response.code === 202) {",
-              "  pm.collectionVariables.set('executionId', pm.response.json().execution._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/execute", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","execute"] },
-            "body": { "mode": "raw", "raw": "{\n  \"payload\": {}\n}" }
-          }
+          "name": "Trigger Workflow (manual)",
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 200 || pm.response.code === 202) {",
+            "  const b = pm.response.json();",
+            "  if (b.execution && b.execution._id) pm.collectionVariables.set('executionId', b.execution._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/trigger","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","trigger"]},
+            "body": {"mode":"raw","raw":"{\n  \"payload\": {}\n}"} }
         },
         {
-          "name": "List Workflow Executions",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/executions?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","executions"], "query": [{"key":"page","value":"1"},{"key":"limit","value":"20"}] }
-          }
+          "name": "List Executions",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/executions?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","executions"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
         },
         {
-          "name": "Get Execution Details",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/executions/{{executionId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","executions","{{executionId}}"] }
-          }
+          "name": "Get Execution",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/executions/{{executionId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","executions","{{executionId}}"]} }
+        },
+        {
+          "name": "Retry Execution",
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}/executions/{{executionId}}/retry","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}","executions","{{executionId}}","retry"]} }
         },
         {
           "name": "Delete Workflow",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}"] }
-          }
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/workspaces/{{workspaceId}}/workflows/{{workflowId}}","host":["{{baseUrl}}"],"path":["api","workspaces","{{workspaceId}}","workflows","{{workflowId}}"]} }
         }
       ]
     },
-
     {
-      "name": "07 — Webhooks",
-      "description": "Incoming webhooks let external services trigger workflow events. Create a webhook → copy the secret → use webhookId for everything else.",
+      "name": "07 - Notifications",
+      "description": "In-app notification inbox and workspace-scoped preferences.",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/notifications?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","notifications"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
+        },
+        {
+          "name": "List Unread Only",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/notifications?unreadOnly=true","host":["{{baseUrl}}"],"path":["api","notifications"],"query":[{"key":"unreadOnly","value":"true"}]} }
+        },
+        {
+          "name": "Mark Notifications as Read",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/notifications/mark-read","host":["{{baseUrl}}"],"path":["api","notifications","mark-read"]},
+            "body": {"mode":"raw","raw":"{\n  \"notificationIds\": [\"NOTIFICATION_ID_1\", \"NOTIFICATION_ID_2\"]\n}"} }
+        },
+        {
+          "name": "Delete Notification",
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/notifications/NOTIFICATION_ID","host":["{{baseUrl}}"],"path":["api","notifications","NOTIFICATION_ID"]} }
+        },
+        {
+          "name": "Get Notification Preferences",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/notifications/preferences/{{workspaceId}}","host":["{{baseUrl}}"],"path":["api","notifications","preferences","{{workspaceId}}"]} }
+        },
+        {
+          "name": "Update Notification Preferences",
+          "request": { "method": "PUT",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/notifications/preferences/{{workspaceId}}","host":["{{baseUrl}}"],"path":["api","notifications","preferences","{{workspaceId}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"email\": true,\n  \"push\": false,\n  \"sms\": false\n}"} }
+        }
+      ]
+    },
+    {
+      "name": "08 - Payout",
+      "description": "Payout user profiles, wallet, transactions. transactionId auto-saved on create.",
+      "item": [
+        {
+          "name": "Create Payout User",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/payout/user","host":["{{baseUrl}}"],"path":["api","payout","user"]},
+            "body": {"mode":"raw","raw":"{\n  \"userId\": \"USER_ID\",\n  \"email\": \"{{email}}\",\n  \"phone\": \"+1234567890\",\n  \"country\": \"US\",\n  \"currency\": \"USD\"\n}"} }
+        },
+        {
+          "name": "Get Payout User",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID"]} }
+        },
+        {
+          "name": "Update Payout User",
+          "request": { "method": "PUT",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID"]},
+            "body": {"mode":"raw","raw":"{\n  \"phone\": \"+0987654321\"\n}"} }
+        },
+        {
+          "name": "Delete Payout User",
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID"]} }
+        },
+        {
+          "name": "Get Balance",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID/balance","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID","balance"]} }
+        },
+        {
+          "name": "Get Wallet",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID/wallet","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID","wallet"]} }
+        },
+        {
+          "name": "Credit Wallet",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID/wallet/credit","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID","wallet","credit"]},
+            "body": {"mode":"raw","raw":"{\n  \"amount\": 100,\n  \"currency\": \"USD\"\n}"} }
+        },
+        {
+          "name": "Debit Wallet",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID/wallet/debit","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID","wallet","debit"]},
+            "body": {"mode":"raw","raw":"{\n  \"amount\": 50,\n  \"currency\": \"USD\"\n}"} }
+        },
+        {
+          "name": "Transaction History",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID/history?limit=20&status=completed","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID","history"],"query":[{"key":"limit","value":"20"},{"key":"status","value":"completed"}]} }
+        },
+        {
+          "name": "Export Transactions (CSV)",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/payout/user/USER_ID/export?format=csv","host":["{{baseUrl}}"],"path":["api","payout","user","USER_ID","export"],"query":[{"key":"format","value":"csv"}]} }
+        },
+        {
+          "name": "Create Payout",
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 200 || pm.response.code === 201) {",
+            "  const b = pm.response.json();",
+            "  if (b.transactionId) pm.collectionVariables.set('transactionId', b.transactionId);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/payout","host":["{{baseUrl}}"],"path":["api","payout"]},
+            "body": {"mode":"raw","raw":"{\n  \"userId\": \"USER_ID\",\n  \"amount\": 50,\n  \"currency\": \"USD\",\n  \"description\": \"Test payout\"\n}"} }
+        },
+        {
+          "name": "Get Transaction Status",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/payout/{{transactionId}}","host":["{{baseUrl}}"],"path":["api","payout","{{transactionId}}"]} }
+        }
+      ]
+    },
+    {
+      "name": "09 - Webhooks",
+      "description": "Register and manage webhook endpoints. webhookId auto-saved on create.",
       "item": [
         {
           "name": "Create Webhook",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('webhookId', pm.response.json().webhook._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/webhooks", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","webhooks"] },
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"GitHub CI\",\n  \"description\": \"Receives GitHub Actions events\",\n  \"workflowId\": \"{{workflowId}}\"\n}" }
-          }
+          "event": [{"listen":"test","script":{"exec":[
+            "if (pm.response.code === 201) {",
+            "  pm.collectionVariables.set('webhookId', pm.response.json().webhook._id);",
+            "}"
+          ]}}],
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/webhooks","host":["{{baseUrl}}"],"path":["api","webhooks"]},
+            "body": {"mode":"raw","raw":"{\n  \"url\": \"https://webhook.site/YOUR_ID\",\n  \"events\": [\"payout.initiated\", \"payout.completed\", \"payout.failed\"],\n  \"description\": \"My webhook\"\n}"} }
         },
         {
           "name": "List Webhooks",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/webhooks", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","webhooks"] }
-          }
-        },
-        {
-          "name": "Get Webhook",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/webhooks/{{webhookId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","webhooks","{{webhookId}}"] }
-          }
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/webhooks","host":["{{baseUrl}}"],"path":["api","webhooks"]} }
         },
         {
           "name": "Update Webhook",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/webhooks/{{webhookId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","webhooks","{{webhookId}}"] },
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"GitHub CI (updated)\",\n  \"description\": \"Updated description\"\n}" }
-          }
+          "request": { "method": "PATCH",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/webhooks/{{webhookId}}","host":["{{baseUrl}}"],"path":["api","webhooks","{{webhookId}}"]},
+            "body": {"mode":"raw","raw":"{\n  \"description\": \"Updated webhook\",\n  \"isActive\": true\n}"} }
         },
         {
-          "name": "Rotate Webhook Secret",
-          "request": {
-            "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/webhooks/{{webhookId}}/rotate-secret", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","webhooks","{{webhookId}}","rotate-secret"] }
-          }
+          "name": "Test Webhook",
+          "request": { "method": "POST",
+            "url": {"raw":"{{baseUrl}}/api/webhooks/{{webhookId}}/test","host":["{{baseUrl}}"],"path":["api","webhooks","{{webhookId}}","test"]} }
         },
         {
-          "name": "Trigger Webhook (simulate external call)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-webhook-secret", "value": "PASTE_WEBHOOK_SECRET_HERE" }
-            ],
-            "url": { "raw": "{{baseUrl}}/api/webhooks/{{webhookId}}/trigger", "host": ["{{baseUrl}}"], "path": ["api","webhooks","{{webhookId}}","trigger"] },
-            "body": { "mode": "raw", "raw": "{\n  \"event\": \"push\",\n  \"ref\": \"refs/heads/main\",\n  \"repository\": \"my-org/my-repo\"\n}" }
-          }
-        },
-        {
-          "name": "List Webhook Deliveries",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/webhooks/{{webhookId}}/deliveries?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","webhooks","{{webhookId}}","deliveries"], "query": [{"key":"page","value":"1"},{"key":"limit","value":"20"}] }
-          }
+          "name": "Get Webhook Deliveries",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/webhooks/{{webhookId}}/deliveries?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","webhooks","{{webhookId}}","deliveries"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
         },
         {
           "name": "Delete Webhook",
-          "request": {
-            "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/api/workspaces/{{workspaceId}}/webhooks/{{webhookId}}", "host": ["{{baseUrl}}"], "path": ["api","workspaces","{{workspaceId}}","webhooks","{{webhookId}}"] }
-          }
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/webhooks/{{webhookId}}","host":["{{baseUrl}}"],"path":["api","webhooks","{{webhookId}}"]} }
         }
       ]
     },
-
     {
-      "name": "08 — Payouts",
-      "description": "Manage user payout accounts and transactions. Set userId before running payout requests. Run in order: Add Payout Account → Request Payout → track with transactionId.",
+      "name": "10 - Spending Limits",
+      "description": "Set and manage payout caps per period.",
       "item": [
         {
-          "name": "Get Payout Account",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/account", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","account"] }
-          }
+          "name": "List Spending Limits",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/spending-limits","host":["{{baseUrl}}"],"path":["api","spending-limits"]} }
         },
         {
-          "name": "Add Payout Account",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/account", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","account"] },
-            "body": { "mode": "raw", "raw": "{\n  \"type\": \"bank_transfer\",\n  \"details\": {\n    \"accountHolderName\": \"Test User\",\n    \"accountNumber\": \"0123456789\",\n    \"routingNumber\": \"110000000\",\n    \"currency\": \"USD\"\n  }\n}" }
-          }
+          "name": "Get Usage",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/spending-limits/usage","host":["{{baseUrl}}"],"path":["api","spending-limits","usage"]} }
         },
         {
-          "name": "Update Payout Account",
-          "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/account", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","account"] },
-            "body": { "mode": "raw", "raw": "{\n  \"details\": {\n    \"accountHolderName\": \"Test User Updated\"\n  }\n}" }
-          }
+          "name": "Set Spending Limit",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/spending-limits","host":["{{baseUrl}}"],"path":["api","spending-limits"]},
+            "body": {"mode":"raw","raw":"{\n  \"period\": \"daily\",\n  \"limit\": 1000,\n  \"currency\": \"USD\"\n}"} }
         },
         {
-          "name": "Request Payout",
-          "event": [{
-            "listen": "test",
-            "script": { "exec": [
-              "if (pm.response.code === 201) {",
-              "  pm.collectionVariables.set('transactionId', pm.response.json().transaction._id);",
-              "}"
-            ]}
-          }],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/request", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","request"] },
-            "body": { "mode": "raw", "raw": "{\n  \"amount\": 100.00,\n  \"currency\": \"USD\",\n  \"note\": \"Monthly payout\"\n}" }
-          }
+          "name": "Delete Spending Limit",
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/spending-limits/daily","host":["{{baseUrl}}"],"path":["api","spending-limits","daily"]} }
+        }
+      ]
+    },
+    {
+      "name": "11 - Scheduled Payouts",
+      "description": "Create and manage scheduled/recurring payouts.",
+      "item": [
+        {
+          "name": "Create Scheduled Payout",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/scheduled-payouts","host":["{{baseUrl}}"],"path":["api","scheduled-payouts"]},
+            "body": {"mode":"raw","raw":"{\n  \"userId\": \"USER_ID\",\n  \"amount\": 100,\n  \"currency\": \"USD\",\n  \"scheduledAt\": \"2026-05-01T10:00:00Z\",\n  \"description\": \"Monthly salary\"\n}"} }
         },
         {
-          "name": "List Transactions",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/transactions?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","transactions"], "query": [{"key":"page","value":"1"},{"key":"limit","value":"20"}] }
-          }
+          "name": "List Scheduled Payouts",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/scheduled-payouts?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","scheduled-payouts"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
         },
         {
-          "name": "Get Transaction",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/transactions/{{transactionId}}", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","transactions","{{transactionId}}"] }
-          }
+          "name": "Get Scheduled Payout",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/scheduled-payouts/SCHEDULED_ID","host":["{{baseUrl}}"],"path":["api","scheduled-payouts","SCHEDULED_ID"]} }
         },
         {
-          "name": "Cancel Transaction",
-          "request": {
-            "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/transactions/{{transactionId}}/cancel", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","transactions","{{transactionId}}","cancel"] }
-          }
+          "name": "Update Scheduled Payout",
+          "request": { "method": "PATCH",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/scheduled-payouts/SCHEDULED_ID","host":["{{baseUrl}}"],"path":["api","scheduled-payouts","SCHEDULED_ID"]},
+            "body": {"mode":"raw","raw":"{\n  \"scheduledAt\": \"2026-06-01T10:00:00Z\"\n}"} }
         },
         {
-          "name": "Get Payout Balance",
-          "request": {
-            "method": "GET",
-            "url": { "raw": "{{baseUrl}}/api/payouts/{{userId}}/balance", "host": ["{{baseUrl}}"], "path": ["api","payouts","{{userId}}","balance"] }
-          }
+          "name": "Cancel Scheduled Payout",
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/scheduled-payouts/SCHEDULED_ID","host":["{{baseUrl}}"],"path":["api","scheduled-payouts","SCHEDULED_ID"]} }
+        }
+      ]
+    },
+    {
+      "name": "12 - Admin",
+      "description": "Platform management. Requires admin role. Set role to 'admin' in DB first.",
+      "item": [
+        {
+          "name": "System Stats",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/stats","host":["{{baseUrl}}"],"path":["api","admin","stats"]} }
+        },
+        {
+          "name": "List All Transactions",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/transactions?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","admin","transactions"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
+        },
+        {
+          "name": "List All Users",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/users?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","admin","users"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
+        },
+        {
+          "name": "Get User Detail",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/users/USER_ID","host":["{{baseUrl}}"],"path":["api","admin","users","USER_ID"]} }
+        },
+        {
+          "name": "Get User Transactions",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/users/USER_ID/transactions","host":["{{baseUrl}}"],"path":["api","admin","users","USER_ID","transactions"]} }
+        },
+        {
+          "name": "Update User Status",
+          "request": { "method": "PATCH",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/admin/users/USER_ID/status","host":["{{baseUrl}}"],"path":["api","admin","users","USER_ID","status"]},
+            "body": {"mode":"raw","raw":"{\n  \"status\": \"suspended\",\n  \"reason\": \"Policy violation\"\n}"} }
+        },
+        {
+          "name": "Adjust Balance",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/admin/users/USER_ID/balance","host":["{{baseUrl}}"],"path":["api","admin","users","USER_ID","balance"]},
+            "body": {"mode":"raw","raw":"{\n  \"amount\": 100,\n  \"type\": \"credit\",\n  \"reason\": \"Refund\"\n}"} }
+        },
+        {
+          "name": "Set User Spending Limit",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/admin/users/USER_ID/spending-limits","host":["{{baseUrl}}"],"path":["api","admin","users","USER_ID","spending-limits"]},
+            "body": {"mode":"raw","raw":"{\n  \"period\": \"daily\",\n  \"limit\": 500,\n  \"currency\": \"USD\"\n}"} }
+        },
+        {
+          "name": "Remove User Spending Limit",
+          "request": { "method": "DELETE",
+            "url": {"raw":"{{baseUrl}}/api/admin/users/USER_ID/spending-limits/daily","host":["{{baseUrl}}"],"path":["api","admin","users","USER_ID","spending-limits","daily"]} }
+        },
+        {
+          "name": "List All Scheduled Payouts",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/scheduled-payouts","host":["{{baseUrl}}"],"path":["api","admin","scheduled-payouts"]} }
+        },
+        {
+          "name": "List All Webhooks",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/webhooks","host":["{{baseUrl}}"],"path":["api","admin","webhooks"]} }
+        },
+        {
+          "name": "Audit Logs",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/audit-logs?page=1&limit=20","host":["{{baseUrl}}"],"path":["api","admin","audit-logs"],"query":[{"key":"page","value":"1"},{"key":"limit","value":"20"}]} }
+        },
+        {
+          "name": "Volume Report",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/reports/volume?period=monthly","host":["{{baseUrl}}"],"path":["api","admin","reports","volume"],"query":[{"key":"period","value":"monthly"}]} }
+        },
+        {
+          "name": "Currency Report",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/reports/currency","host":["{{baseUrl}}"],"path":["api","admin","reports","currency"]} }
+        },
+        {
+          "name": "Fraud Report",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/admin/reports/fraud","host":["{{baseUrl}}"],"path":["api","admin","reports","fraud"]} }
+        }
+      ]
+    },
+    {
+      "name": "13 - AI",
+      "description": "AI-powered fraud assessment, investigation, and financial coaching.",
+      "item": [
+        {
+          "name": "Fraud Risk Assessment",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/ai/assess/{{transactionId}}","host":["{{baseUrl}}"],"path":["api","ai","assess","{{transactionId}}"]} }
+        },
+        {
+          "name": "Transaction Investigation",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/ai/investigate/{{transactionId}}","host":["{{baseUrl}}"],"path":["api","ai","investigate","{{transactionId}}"]} }
+        },
+        {
+          "name": "Financial Coach Insights",
+          "request": { "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/ai/insights/USER_ID","host":["{{baseUrl}}"],"path":["api","ai","insights","USER_ID"]} }
+        },
+        {
+          "name": "Validate IP",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/ai/validate-ip","host":["{{baseUrl}}"],"path":["api","ai","validate-ip"]},
+            "body": {"mode":"raw","raw":"{\n  \"ipAddress\": \"8.8.8.8\",\n  \"country\": \"US\"\n}"} }
+        },
+        {
+          "name": "Validate Currency",
+          "request": { "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "url": {"raw":"{{baseUrl}}/api/ai/validate-currency","host":["{{baseUrl}}"],"path":["api","ai","validate-currency"]},
+            "body": {"mode":"raw","raw":"{\n  \"currency\": \"EUR\",\n  \"amount\": 100\n}"} }
+        }
+      ]
+    },
+    {
+      "name": "14 - Public APIs",
+      "description": "Free public API proxies with Redis caching. No auth required.",
+      "item": [
+        {
+          "name": "Get Exchange Rates",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/public/exchange-rates","host":["{{baseUrl}}"],"path":["api","public","exchange-rates"]} }
+        },
+        {
+          "name": "Get Country Info",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/public/countries/US","host":["{{baseUrl}}"],"path":["api","public","countries","US"]} }
+        },
+        {
+          "name": "Get IP Info",
+          "request": { "auth": {"type":"noauth"}, "method": "GET",
+            "url": {"raw":"{{baseUrl}}/api/public/ip/8.8.8.8","host":["{{baseUrl}}"],"path":["api","public","ip","8.8.8.8"]} }
         }
       ]
     }
-
   ]
 }

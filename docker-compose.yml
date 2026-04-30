@@ -14,7 +14,7 @@ services:
     networks:
       - nexusflow_net
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/nexusflow --quiet
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/admin -u ${MONGO_ROOT_USER:-admin} -p ${MONGO_ROOT_PASS} --quiet
       interval: 10s
       timeout: 5s
       retries: 5

@@ -29,3 +29,12 @@ Thumbs.db
 mongodb_data/
 redis_data/
 rabbitmq_data/
+
+# Generated audit reports
+audit-report*.json
+
+# Test output artifacts
+test_output.txt
+
+# Spec files (Kiro)
+.kiro/

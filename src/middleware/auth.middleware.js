@@ -38,17 +38,23 @@ export const isAuthenticated = async (req, res, next) => {
             });
         }
 
-        // Load user from Redis cache (or MongoDB on cache miss)
-        const user = await getCachedUser(payload.sub);
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found",
-            });
+        // Read user claims from token — no Redis call needed for normal requests
+        req.userId = payload.sub;
+        req.user = {
+            _id: payload.sub,
+            role: payload.role || 'user',
+            isVerified: payload.isVerified ?? false,
+        };
+
+        // For admin users, still verify against cache/DB for security
+        if (payload.role === 'admin') {
+            const user = await getCachedUser(payload.sub);
+            if (!user) {
+                return res.status(404).json({ success: false, message: 'User not found' });
+            }
+            req.user = user;
         }
 
-        req.user   = user;
-        req.userId = payload.sub;
         next();
     } catch (error) {
         return res.status(500).json({

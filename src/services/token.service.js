@@ -78,12 +78,14 @@ export const TOKEN_TTL = {
 
 // ── Token issuance ────────────────────────────────────────────────────────────
 
-export async function issueAccessToken(userId) {
+export async function issueAccessToken(userId, userClaims = {}) {
     const payload = {
         sub: userId.toString(),
         jti: crypto.randomBytes(16).toString("hex"),
         exp: expiresAt(TOKEN_TTL.ACCESS),
         typ: "access",
+        role: userClaims.role || "user",
+        isVerified: userClaims.isVerified ?? false,
     };
     return V4.sign(payload, accessKeys.privateKey);
 }
@@ -108,9 +110,9 @@ export async function issueVerifyToken(userId) {
     return V4.sign(payload, verifyKeys.privateKey);
 }
 
-export async function issueTokenPair(userId) {
+export async function issueTokenPair(userId, userClaims = {}) {
     const [accessToken, refreshToken] = await Promise.all([
-        issueAccessToken(userId),
+        issueAccessToken(userId, userClaims),
         issueRefreshToken(userId),
     ]);
     return { accessToken, refreshToken };

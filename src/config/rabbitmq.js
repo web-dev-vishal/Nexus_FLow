@@ -13,6 +13,10 @@ class RabbitMQConnection {
         this.reconnectTimer = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
+        this.channelPool = [];
+        this.poolIndex = 0;
+        this.poolMin = parseInt(process.env.RABBITMQ_POOL_MIN) || 2;
+        this.poolMax = parseInt(process.env.RABBITMQ_POOL_MAX) || 10;
     }
 
     async connect() {
@@ -35,6 +39,9 @@ class RabbitMQConnection {
 
             // Create the queues and exchanges we need
             await this._setupQueues();
+
+            // Initialise the channel pool for publishing/consuming
+            await this._initChannelPool();
 
             // If the connection drops while the app is running, log it and try to reconnect
             this.connection.on("error", (err) => {
@@ -116,6 +123,16 @@ class RabbitMQConnection {
         logger.info("RabbitMQ queues configured (payout + workflow + message events + notifications)");
     }
 
+    async _initChannelPool() {
+        // Create poolMin channels upfront; more can be added up to poolMax on demand
+        for (let i = 0; i < this.poolMin; i++) {
+            const ch = await this.connection.createChannel();
+            await ch.prefetch(parseInt(process.env.WORKER_CONCURRENCY) || 5);
+            this.channelPool.push(ch);
+        }
+        logger.info(`RabbitMQ channel pool initialised (${this.poolMin} channels)`);
+    }
+
     _scheduleReconnect() {
         // Don't schedule a new reconnect if one is already pending
         if (this.reconnectTimer) return;
@@ -150,7 +167,13 @@ class RabbitMQConnection {
             this.reconnectTimer = null;
         }
 
-        // Close channel first, then the connection
+        // Close pool channels
+        for (const ch of this.channelPool) {
+            try { await ch.close(); } catch { /* ignore */ }
+        }
+        this.channelPool = [];
+
+        // Close setup channel, then the connection
         if (this.channel) {
             await this.channel.close();
             this.channel = null;
@@ -167,10 +190,18 @@ class RabbitMQConnection {
 
     // Returns the channel so services can publish/consume messages
     getChannel() {
-        if (!this.isConnected || !this.channel) {
+        if (!this.isConnected) {
             throw new Error("RabbitMQ channel not available");
         }
-        return this.channel;
+        // Fall back to single channel if pool not yet initialised
+        if (this.channelPool.length === 0) {
+            if (!this.channel) throw new Error("RabbitMQ channel not available");
+            return this.channel;
+        }
+        // Round-robin across pool
+        const ch = this.channelPool[this.poolIndex % this.channelPool.length];
+        this.poolIndex++;
+        return ch;
     }
 
     isHealthy() {

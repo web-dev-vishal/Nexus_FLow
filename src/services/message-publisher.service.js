@@ -13,7 +13,7 @@ class MessagePublisher {
 
     // Publish a payout job to the payout_queue.
     // Returns true if the message was accepted by RabbitMQ, false if the buffer is full.
-    publishPayoutMessage(payload) {
+    publishPayoutMessage(payload, options) {
         // Build the full message — include everything the worker needs to process the payout
         const message = {
             transactionId: payload.transactionId,
@@ -36,6 +36,7 @@ class MessagePublisher {
                 headers: {
                     "x-retry-count": 0,     // Worker uses this to track retry attempts
                     "x-source":      "api-gateway",
+                    correlationId:   options?.correlationId || '',
                 },
             }
         );
@@ -55,7 +56,7 @@ class MessagePublisher {
 
     // Publish a workflow execution job to the workflow_queue.
     // Called when a workflow is triggered (manually, by keyword, by schedule, or by webhook).
-    publishWorkflowJob(payload) {
+    publishWorkflowJob(payload, options) {
         const message = {
             executionId: payload.executionId,
             workflowId:  payload.workflowId,
@@ -76,6 +77,7 @@ class MessagePublisher {
                 headers: {
                     "x-retry-count": 0,
                     "x-source":      "api-gateway",
+                    correlationId:   options?.correlationId || '',
                 },
             }
         );
@@ -94,7 +96,7 @@ class MessagePublisher {
 
     // Publish a message event so workflow keyword triggers can be evaluated asynchronously.
     // Also used for analytics tracking — doesn't block the HTTP response.
-    publishMessageEvent(payload) {
+    publishMessageEvent(payload, options) {
         const message = {
             messageId:   payload.messageId,
             workspaceId: payload.workspaceId,
@@ -111,6 +113,9 @@ class MessagePublisher {
                 persistent:  true,
                 contentType: "application/json",
                 timestamp:   Date.now(),
+                headers: {
+                    correlationId: options?.correlationId || '',
+                },
             }
         );
 
@@ -122,7 +127,7 @@ class MessagePublisher {
     }
 
     // Publish a notification delivery job.
-    publishNotification(payload) {
+    publishNotification(payload, options) {
         const message = {
             userId:      payload.userId,
             type:        payload.type,
@@ -140,6 +145,9 @@ class MessagePublisher {
                 persistent:  true,
                 contentType: "application/json",
                 timestamp:   Date.now(),
+                headers: {
+                    correlationId: options?.correlationId || '',
+                },
             }
         );
 

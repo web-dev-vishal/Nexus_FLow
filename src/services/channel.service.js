@@ -4,12 +4,7 @@ import Channel from "../models/channel.model.js";
 import Message from "../models/message.model.js";
 import { assertMember, assertRole } from "./workspace.service.js";
 import logger from "../utils/logger.js";
-
-const createError = (statusCode, message) => {
-    const err = new Error(message);
-    err.statusCode = statusCode;
-    return err;
-};
+import { AppError } from "../utils/app-error.js";
 
 // ── Create channel ────────────────────────────────────────────────────────────
 export async function createChannel(workspaceId, userId, { name, description, type }) {
@@ -21,7 +16,7 @@ export async function createChannel(workspaceId, userId, { name, description, ty
     }
 
     const existing = await Channel.findOne({ workspaceId, name: name.toLowerCase() });
-    if (existing) throw createError(409, `A channel named #${name} already exists`);
+    if (existing) throw new AppError(`A channel named #${name} already exists`, 409, "CHANNEL_EXISTS");
 
     const channel = await Channel.create({
         workspaceId,
@@ -60,12 +55,12 @@ export async function getChannel(workspaceId, channelId, userId) {
     await assertMember(workspaceId, userId);
 
     const channel = await Channel.findOne({ _id: channelId, workspaceId }).lean();
-    if (!channel) throw createError(404, "Channel not found");
+    if (!channel) throw new AppError("Channel not found", 404, "CHANNEL_NOT_FOUND");
 
     // Private channel — only members can see it
     if (channel.type === "private") {
         const isMember = channel.members.some(m => m.toString() === userId.toString());
-        if (!isMember) throw createError(403, "You are not a member of this private channel");
+        if (!isMember) throw new AppError("You are not a member of this private channel", 403, "FORBIDDEN");
     }
 
     return channel;
@@ -77,7 +72,7 @@ export async function updateChannel(workspaceId, channelId, userId, updates) {
     await assertRole(workspaceId, userId, ["owner", "admin"]);
 
     if (channel.isDefault && updates.name) {
-        throw createError(400, "Cannot rename a default channel");
+        throw new AppError("Cannot rename a default channel", 400, "CANNOT_MODIFY_DEFAULT");
     }
 
     const allowed = ["name", "description", "topic"];
@@ -91,7 +86,7 @@ export async function updateChannel(workspaceId, channelId, userId, updates) {
             name: filtered.name.toLowerCase(),
             _id:  { $ne: channelId },
         });
-        if (existing) throw createError(409, `A channel named #${filtered.name} already exists`);
+        if (existing) throw new AppError(`A channel named #${filtered.name} already exists`, 409, "CHANNEL_EXISTS");
         filtered.name = filtered.name.toLowerCase();
     }
 
@@ -103,7 +98,7 @@ export async function deleteChannel(workspaceId, channelId, userId) {
     const channel = await getChannel(workspaceId, channelId, userId);
     await assertRole(workspaceId, userId, ["owner", "admin"]);
 
-    if (channel.isDefault) throw createError(400, "Cannot delete a default channel");
+    if (channel.isDefault) throw new AppError("Cannot delete a default channel", 400, "CANNOT_MODIFY_DEFAULT");
 
     await Channel.findByIdAndUpdate(channelId, { isArchived: true });
     logger.info("Channel archived", { workspaceId, channelId });
@@ -114,8 +109,8 @@ export async function joinChannel(workspaceId, channelId, userId) {
     await assertMember(workspaceId, userId);
 
     const channel = await Channel.findOne({ _id: channelId, workspaceId });
-    if (!channel) throw createError(404, "Channel not found");
-    if (channel.type === "private") throw createError(403, "Cannot join a private channel — you need an invite");
+    if (!channel) throw new AppError("Channel not found", 404, "CHANNEL_NOT_FOUND");
+    if (channel.type === "private") throw new AppError("Cannot join a private channel", 403, "FORBIDDEN");
 
     const alreadyMember = channel.members.some(m => m.toString() === userId.toString());
     if (alreadyMember) return channel;
@@ -128,8 +123,8 @@ export async function joinChannel(workspaceId, channelId, userId) {
 // ── Leave channel ─────────────────────────────────────────────────────────────
 export async function leaveChannel(workspaceId, channelId, userId) {
     const channel = await Channel.findOne({ _id: channelId, workspaceId });
-    if (!channel) throw createError(404, "Channel not found");
-    if (channel.isDefault) throw createError(400, "Cannot leave a default channel");
+    if (!channel) throw new AppError("Channel not found", 404, "CHANNEL_NOT_FOUND");
+    if (channel.isDefault) throw new AppError("Cannot leave a default channel", 400, "CANNOT_MODIFY_DEFAULT");
 
     channel.members = channel.members.filter(m => m.toString() !== userId.toString());
     await channel.save();
@@ -140,13 +135,13 @@ export async function pinMessage(workspaceId, channelId, messageId, userId) {
     await assertMember(workspaceId, userId);
 
     const channel = await Channel.findOne({ _id: channelId, workspaceId });
-    if (!channel) throw createError(404, "Channel not found");
+    if (!channel) throw new AppError("Channel not found", 404, "CHANNEL_NOT_FOUND");
 
     const alreadyPinned = channel.pinnedMessages.some(
         p => p.messageId.toString() === messageId.toString()
     );
-    if (alreadyPinned) throw createError(409, "Message is already pinned");
-    if (channel.pinnedMessages.length >= 10) throw createError(400, "Cannot pin more than 10 messages");
+    if (alreadyPinned) throw new AppError("Message is already pinned", 409, "ALREADY_PINNED");
+    if (channel.pinnedMessages.length >= 10) throw new AppError("Cannot pin more than 10 messages", 400, "PIN_LIMIT_REACHED");
 
     channel.pinnedMessages.push({ messageId, pinnedBy: userId });
     await channel.save();
@@ -158,7 +153,7 @@ export async function unpinMessage(workspaceId, channelId, messageId, userId) {
     await assertMember(workspaceId, userId);
 
     const channel = await Channel.findOne({ _id: channelId, workspaceId });
-    if (!channel) throw createError(404, "Channel not found");
+    if (!channel) throw new AppError("Channel not found", 404, "CHANNEL_NOT_FOUND");
 
     channel.pinnedMessages = channel.pinnedMessages.filter(
         p => p.messageId.toString() !== messageId.toString()

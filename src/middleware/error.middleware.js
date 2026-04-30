@@ -27,14 +27,15 @@ export const notFoundHandler = (req, res) => {
 // Express identifies this as an error handler because it has 4 parameters (err, req, res, next).
 export const errorHandler = async (err, req, res, next) => {
     logger.error("Unhandled error", {
-        message: err.message,
-        code:    err.code,
-        url:     req.originalUrl,
-        method:  req.method,
-        ip:      req.ip,
-        userId:  req.body?.userId,
+        message:       err.message,
+        code:          err.code,
+        url:           req.originalUrl,
+        method:        req.method,
+        ip:            req.ip,
+        userId:        req.body?.userId,
+        correlationId: req.correlationId,
         // Only include stack traces in development — never expose them in production
-        stack:   process.env.NODE_ENV === "development" ? err.stack : undefined,
+        stack:         process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
 
     // Start with the error as-is, then normalize known error types below

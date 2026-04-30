@@ -4,6 +4,7 @@
 
 // Load environment variables first — everything else depends on them
 import "dotenv/config";
+import "./src/config/env.js";
 import Application from "./src/app.js";
 import logger from "./src/utils/logger.js";
 

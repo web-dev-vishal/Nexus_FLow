@@ -19,13 +19,15 @@ jest.unstable_mockModule('../models/channel.model.js', () => ({
 
 jest.unstable_mockModule('../models/direct-message.model.js', () => ({
     default: {
-        findOne: jest.fn(),
+        findOne:           jest.fn(),
+        findByIdAndUpdate: jest.fn().mockResolvedValue({}),
     }
 }));
 
 jest.unstable_mockModule('../models/notification.model.js', () => ({
     default: {
-        create: jest.fn(),
+        create:      jest.fn(),
+        insertMany:  jest.fn().mockResolvedValue([]),
     }
 }));
 
@@ -76,7 +78,7 @@ describe('NexusFlow (Chat) WebSocket Emissions', () => {
         Message.create.mockResolvedValue(msgData);
         Channel.findOne.mockResolvedValue({ _id: 'ch1' });
 
-        await sendMessage('ws1', 'ch1', 'u1', 'hello');
+        await sendMessage('ws1', 'ch1', 'u1', { content: 'hello' });
 
         expect(Message.create).toHaveBeenCalled();
         expect(mockWs.emitMessageCreated).toHaveBeenCalled();
@@ -93,9 +95,17 @@ describe('NexusFlow (Chat) WebSocket Emissions', () => {
             save: jest.fn().mockResolvedValue(true),
         };
         Message.create.mockResolvedValue(msgData);
-        DM.findOne.mockResolvedValue({ _id: 'dm1' });
+        DM.findOne.mockReturnValue({
+            populate: jest.fn().mockReturnValue({
+                lean: jest.fn().mockResolvedValue({
+                    _id: 'dm1',
+                    participants: [{ _id: 'u1' }, { _id: 'u2' }],
+                    closedBy: [],
+                }),
+            }),
+        });
 
-        await sendDMMessage('ws1', 'dm1', 'u1', 'hi dm');
+        await sendDMMessage('ws1', 'dm1', 'u1', { content: 'hi dm' });
 
         expect(Message.create).toHaveBeenCalled();
         expect(mockWs.emitMessageCreated).toHaveBeenCalled();

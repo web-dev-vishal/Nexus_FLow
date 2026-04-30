@@ -8,6 +8,7 @@ import { verifyMail } from "../email/verifyMail.js";
 import { sendOtpMail } from "../email/sendOtpMail.js";
 import { getRedis, keys, TTL } from "../lib/redis.js";
 import logger from "../utils/logger.js";
+import { AppError } from "../utils/app-error.js";
 import {
     issueTokenPair,
     issueAccessToken,
@@ -23,17 +24,10 @@ const redis = {
     del: (...a) => getRedis().del(...a),
 };
 
-// Attach a statusCode so the controller knows which HTTP status to send
-const createError = (statusCode, message) => {
-    const err = new Error(message);
-    err.statusCode = statusCode;
-    return err;
-};
-
 // ── Register ──────────────────────────────────────────────────────────────────
 export const registerService = async ({ username, email, password }) => {
     const existingUser = await User.findOne({ email });
-    if (existingUser) throw createError(400, "User already exists");
+    if (existingUser) throw new AppError("User already exists", 400, "USER_EXISTS");
 
     // pre-save hook in user.model.js hashes the password automatically
     const newUser = await User.create({ username, email, password });
@@ -67,9 +61,9 @@ export const verifyEmailService = async (token) => {
         payload = await verifyVerifyToken(token);
     } catch (err) {
         if (err.code === "TOKEN_EXPIRED") {
-            throw createError(400, "Verification token has expired. Please request a new one.");
+            throw new AppError("Verification token has expired. Please request a new one.", 400, "TOKEN_EXPIRED");
         }
-        throw createError(400, "Verification token is invalid.");
+        throw new AppError("Verification token is invalid.", 400, "INVALID_TOKEN");
     }
 
     const userId = payload.sub;
@@ -77,12 +71,12 @@ export const verifyEmailService = async (token) => {
     // Compare against Redis — prevents reuse of an already-used token
     const storedToken = await redis.get(keys.verifyToken(userId));
     if (!storedToken || storedToken !== token) {
-        throw createError(400, "Verification token is invalid or already used.");
+        throw new AppError("Verification token is invalid or already used.", 400, "INVALID_TOKEN");
     }
 
     const user = await User.findById(userId);
-    if (!user)           throw createError(404, "User not found.");
-    if (user.isVerified) throw createError(400, "Email is already verified.");
+    if (!user)           throw new AppError("User not found.", 404, "USER_NOT_FOUND");
+    if (user.isVerified) throw new AppError("Email is already verified.", 400, "ALREADY_VERIFIED");
 
     user.isVerified = true;
     await user.save();
@@ -96,17 +90,17 @@ export const loginService = async ({ email, password }) => {
     const user = await User.findOne({ email });
     if (!user) {
         // Same message for wrong email and wrong password — prevents user enumeration
-        throw createError(401, "Invalid email or password");
+        throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
     }
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) throw createError(401, "Invalid email or password");
+    if (!isMatch) throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
 
     if (!user.isVerified) {
-        throw createError(403, "Please verify your email before logging in");
+        throw new AppError("Please verify your email before logging in", 403, "EMAIL_NOT_VERIFIED");
     }
 
-    const { accessToken, refreshToken } = await issueTokenPair(user._id);
+    const { accessToken, refreshToken } = await issueTokenPair(user._id, { role: user.role, isVerified: user.isVerified });
 
     // Store refresh token server-side — deleting this key = instant session invalidation
     await redis.set(
@@ -149,9 +143,9 @@ export const refreshTokenService = async (token) => {
         payload = await verifyRefreshToken(token);
     } catch (err) {
         if (err.code === "TOKEN_EXPIRED") {
-            throw createError(401, "Refresh token has expired. Please log in again.");
+            throw new AppError("Refresh token has expired. Please log in again.", 401, "TOKEN_EXPIRED");
         }
-        throw createError(401, "Invalid refresh token.");
+        throw new AppError("Invalid refresh token.", 401, "INVALID_TOKEN");
     }
 
     const userId = payload.sub;
@@ -159,10 +153,15 @@ export const refreshTokenService = async (token) => {
     // Validate against Redis — catches tokens from already-logged-out sessions
     const storedToken = await redis.get(keys.refreshToken(userId));
     if (!storedToken || storedToken !== token) {
-        throw createError(401, "Refresh token is invalid or session has expired. Please log in again.");
+        throw new AppError("Refresh token is invalid or session has expired. Please log in again.", 401, "INVALID_TOKEN");
     }
 
-    const accessToken = await issueAccessToken(userId);
+    // Get user from cache to embed claims in new access token
+    const cachedUser = await getCachedUser(userId);
+    const accessToken = await issueAccessToken(userId, {
+        role: cachedUser?.role || 'user',
+        isVerified: cachedUser?.isVerified ?? false,
+    });
     return { accessToken };
 };
 
@@ -173,7 +172,7 @@ export const getCachedUser = async (userId) => {
     const cached = await redis.get(keys.userCache(id));
     if (cached) return JSON.parse(cached);
 
-    const user = await User.findById(id).select("-password");
+    const user = await User.findById(id).select("-password -__v");
     if (!user) return null;
 
     const userPayload = {
@@ -197,7 +196,7 @@ export const getCachedUser = async (userId) => {
 // ── Forgot Password ───────────────────────────────────────────────────────────
 export const forgotPasswordService = async (email) => {
     const user = await User.findOne({ email });
-    if (!user) throw createError(404, "User not found");
+    if (!user) throw new AppError("User not found", 404, "USER_NOT_FOUND");
 
     // 6-digit OTP — 100000 to 999999
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -208,18 +207,18 @@ export const forgotPasswordService = async (email) => {
         await sendOtpMail(email, otp);
     } catch (mailErr) {
         await redis.del(keys.otp(email));
-        throw createError(500, "Failed to send OTP email. Please try again.");
+        throw new AppError("Failed to send OTP email. Please try again.", 500, "EMAIL_SEND_FAILED");
     }
 };
 
 // ── Verify OTP ────────────────────────────────────────────────────────────────
 export const verifyOTPService = async (email, otp) => {
     const user = await User.findOne({ email });
-    if (!user) throw createError(404, "User not found");
+    if (!user) throw new AppError("User not found", 404, "USER_NOT_FOUND");
 
     const storedOtp = await redis.get(keys.otp(email));
-    if (!storedOtp)        throw createError(400, "OTP not generated or already used");
-    if (otp !== storedOtp) throw createError(400, "Invalid OTP");
+    if (!storedOtp)        throw new AppError("OTP not generated or already used", 400, "OTP_INVALID");
+    if (otp !== storedOtp) throw new AppError("Invalid OTP", 400, "OTP_INVALID");
 
     await redis.del(keys.otp(email));
 
@@ -231,15 +230,15 @@ export const verifyOTPService = async (email, otp) => {
 export const changePasswordService = async (email, { newPassword }) => {
     const otpVerified = await redis.get(`otp_verified:${email}`);
     if (!otpVerified) {
-        throw createError(403, "OTP verification required before changing password");
+        throw new AppError("OTP verification required before changing password", 403, "OTP_REQUIRED");
     }
 
     if (newPassword.length < 6) {
-        throw createError(400, "Password must be at least 6 characters");
+        throw new AppError("Password must be at least 6 characters", 400, "INVALID_PASSWORD");
     }
 
     const user = await User.findOne({ email });
-    if (!user) throw createError(404, "User not found");
+    if (!user) throw new AppError("User not found", 404, "USER_NOT_FOUND");
 
     // Assign plain text — pre-save hook hashes it
     user.password = newPassword;
@@ -253,8 +252,8 @@ export const changePasswordService = async (email, { newPassword }) => {
 // ── Resend Verification Email ─────────────────────────────────────────────────
 export const resendVerificationService = async (email) => {
     const user = await User.findOne({ email });
-    if (!user)           throw createError(404, "User not found");
-    if (user.isVerified) throw createError(400, "This account is already verified");
+    if (!user)           throw new AppError("User not found", 404, "USER_NOT_FOUND");
+    if (user.isVerified) throw new AppError("This account is already verified", 400, "ALREADY_VERIFIED");
 
     const verificationToken = await issueVerifyToken(user._id);
 
@@ -276,7 +275,7 @@ export const updateProfileService = async (userId, { username, email }) => {
 
     if (email) {
         const existing = await User.findOne({ email, _id: { $ne: userId } });
-        if (existing) throw createError(409, "Email is already in use by another account");
+        if (existing) throw new AppError("Email is already in use by another account", 409, "EMAIL_IN_USE");
         updates.email      = email.toLowerCase().trim();
         updates.isVerified = false;
     }
@@ -287,7 +286,7 @@ export const updateProfileService = async (userId, { username, email }) => {
         { new: true, runValidators: true }
     ).select("-password -__v");
 
-    if (!user) throw createError(404, "User not found");
+    if (!user) throw new AppError("User not found", 404, "USER_NOT_FOUND");
 
     await redis.del(keys.userCache(userId));
     return user;

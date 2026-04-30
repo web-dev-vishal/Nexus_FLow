@@ -7,12 +7,7 @@ import Channel from "../models/channel.model.js";
 import User from "../models/user.model.js";
 import { getRedis } from "../lib/redis.js";
 import logger from "../utils/logger.js";
-
-const createError = (statusCode, message) => {
-    const err = new Error(message);
-    err.statusCode = statusCode;
-    return err;
-};
+import { AppError } from "../utils/app-error.js";
 
 // Cache TTL for workspace data — 5 minutes
 const WORKSPACE_CACHE_TTL = 5 * 60;
@@ -79,7 +74,7 @@ export async function getWorkspace(workspaceId) {
     if (cached) return JSON.parse(cached);
 
     const workspace = await Workspace.findById(workspaceId).lean();
-    if (!workspace) throw createError(404, "Workspace not found");
+    if (!workspace) throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
 
     await redis.set(cacheKey, JSON.stringify(workspace), "EX", WORKSPACE_CACHE_TTL);
     return workspace;
@@ -122,7 +117,7 @@ export async function updateWorkspace(workspaceId, userId, updates) {
         { new: true, runValidators: true }
     );
 
-    if (!workspace) throw createError(404, "Workspace not found");
+    if (!workspace) throw new AppError("Workspace not found", 404, "WORKSPACE_NOT_FOUND");
 
     // Bust the cache
     await getRedis().del(`workspace:${workspaceId}`);
@@ -147,13 +142,13 @@ export async function inviteMember(workspaceId, inviterId, email, role = "member
     const workspace = await getWorkspace(workspaceId);
 
     // Find the user by email
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) throw createError(404, `No account found for ${email}`);
+    const user = await User.findOne({ email: email.toLowerCase() }).select("_id email username");
+    if (!user) throw new AppError(`No account found for ${email}`, 404, "USER_NOT_FOUND");
 
     // Check if already a member
     const existing = await WorkspaceMember.findOne({ workspaceId, userId: user._id });
     if (existing && existing.isActive) {
-        throw createError(409, "User is already a member of this workspace");
+        throw new AppError("User is already a member of this workspace", 409, "ALREADY_MEMBER");
     }
 
     if (existing && !existing.isActive) {
@@ -203,7 +198,7 @@ export async function changeMemberRole(workspaceId, requesterId, targetUserId, n
     // Can't change the owner's role
     const workspace = await getWorkspace(workspaceId);
     if (workspace.ownerId.toString() === targetUserId.toString()) {
-        throw createError(403, "Cannot change the workspace owner's role");
+        throw new AppError("Cannot change the workspace owner's role", 403, "CANNOT_CHANGE_OWNER");
     }
 
     const member = await WorkspaceMember.findOneAndUpdate(
@@ -212,7 +207,7 @@ export async function changeMemberRole(workspaceId, requesterId, targetUserId, n
         { new: true }
     );
 
-    if (!member) throw createError(404, "Member not found in this workspace");
+    if (!member) throw new AppError("Member not found in this workspace", 404, "MEMBER_NOT_FOUND");
     return member;
 }
 
@@ -222,7 +217,7 @@ export async function removeMember(workspaceId, requesterId, targetUserId) {
 
     const workspace = await getWorkspace(workspaceId);
     if (workspace.ownerId.toString() === targetUserId.toString()) {
-        throw createError(403, "Cannot remove the workspace owner");
+        throw new AppError("Cannot remove the workspace owner", 403, "CANNOT_REMOVE_OWNER");
     }
 
     await WorkspaceMember.findOneAndUpdate(
@@ -261,9 +256,9 @@ export async function assertRole(workspaceId, userId, allowedRoles) {
         isActive: true,
     });
 
-    if (!member) throw createError(403, "You are not a member of this workspace");
+    if (!member) throw new AppError("You are not a member of this workspace", 403, "NOT_A_MEMBER");
     if (!allowedRoles.includes(member.role)) {
-        throw createError(403, `This action requires one of these roles: ${allowedRoles.join(", ")}`);
+        throw new AppError(`This action requires one of these roles: ${allowedRoles.join(", ")}`, 403, "INSUFFICIENT_ROLE");
     }
 
     return member;

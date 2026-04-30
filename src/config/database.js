@@ -15,8 +15,8 @@ class DatabaseConnection {
         // A pool means we keep several connections open and reuse them instead of
         // opening a new one for every database query (which would be very slow).
         const options = {
-            maxPoolSize:              10,    // at most 10 connections open at the same time
-            minPoolSize:              2,     // always keep at least 2 warm so queries don't wait
+            maxPoolSize:              parseInt(process.env.MONGO_MAX_POOL_SIZE) || 10,  // at most N connections open at the same time
+            minPoolSize:              parseInt(process.env.MONGO_MIN_POOL_SIZE) || 2,   // always keep at least N warm so queries don't wait
             socketTimeoutMS:          45000, // if a query takes longer than 45s, give up
             serverSelectionTimeoutMS: 5000,  // if MongoDB isn't reachable in 5s, throw an error
             family:                   4,     // use IPv4 — avoids weird IPv6 DNS issues on some servers

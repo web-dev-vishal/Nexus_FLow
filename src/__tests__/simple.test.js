@@ -17,7 +17,10 @@ jest.unstable_mockModule('../models/message.model.js', () => ({
     }
 }));
 jest.unstable_mockModule('../models/channel.model.js', () => ({
-    default: { findOne: jest.fn().mockResolvedValue({ _id: '1' }) }
+    default: { 
+        findOne:           jest.fn().mockResolvedValue({ _id: '1' }),
+        findByIdAndUpdate: jest.fn().mockResolvedValue({}),
+    }
 }));
 jest.unstable_mockModule('../services/workspace.service.js', () => ({
     assertMember: jest.fn().mockResolvedValue({ role: 'owner' })
@@ -29,7 +32,7 @@ const { sendMessage } = await import('../services/message.service.js');
 describe('Service Mock Test', () => {
     test('mock is injected into service', async () => {
         try {
-            await sendMessage('ws1', 'ch1', 'u1', 'hello');
+            await sendMessage('ws1', 'ch1', 'u1', { content: 'hello' });
         } catch (err) {
             console.error('sendMessage failed:', err);
             throw err;
