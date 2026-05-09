@@ -8,12 +8,35 @@ import { RedisStore } from "rate-limit-redis";
 import redisConnection from "../config/redis.js";
 
 // Helper to create a Redis-backed store for a given key prefix.
-// Using Redis means rate limit counters survive server restarts and work across multiple instances.
-const makeStore = (prefix) =>
-    new RedisStore({
-        sendCommand: (...args) => redisConnection.getClient().call(...args),
-        prefix:      `rl:${prefix}:`,
-    });
+// The store is constructed lazily on first use so that this module can be imported
+// before redisConnection.connect() has been called without throwing.
+const makeStore = (prefix) => {
+    let store = null;
+    return {
+        // rate-limit-redis RedisStore interface — proxied to a lazily-created instance
+        async increment(key) {
+            if (!store) store = new RedisStore({
+                sendCommand: (...args) => redisConnection.getClient().call(...args),
+                prefix:      `rl:${prefix}:`,
+            });
+            return store.increment(key);
+        },
+        async decrement(key) {
+            if (!store) store = new RedisStore({
+                sendCommand: (...args) => redisConnection.getClient().call(...args),
+                prefix:      `rl:${prefix}:`,
+            });
+            return store.decrement(key);
+        },
+        async resetKey(key) {
+            if (!store) store = new RedisStore({
+                sendCommand: (...args) => redisConnection.getClient().call(...args),
+                prefix:      `rl:${prefix}:`,
+            });
+            return store.resetKey(key);
+        },
+    };
+};
 
 // Factory to avoid repeating the same rateLimit config for every route
 const createLimiter = (max, windowSec, prefix, message) =>
