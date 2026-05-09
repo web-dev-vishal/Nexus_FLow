@@ -26,52 +26,56 @@ const createLimiter = (max, windowSec, prefix, message) =>
         store:           makeStore(prefix),
     });
 
+// ⚠️  TESTING MODE — limits are intentionally relaxed. Restore before going to production.
+
 // Applied to every request — a broad safety net against abuse.
-// 100 requests per 15 minutes per IP.
+// DEV: 1000 requests per 1 minute per IP  (was: 100 / 15 min)
 export const globalLimiter = createLimiter(
-    100, 15 * 60, "global",
+    1000, 60, "global",
     "Too many requests. Please try again later."
 );
 
 // Tighter limits on sensitive auth endpoints to slow down brute force attempts.
 
-// 5 registrations per hour per IP — prevents mass account creation
+// DEV: 100 registrations per minute  (was: 5 / hour)
 export const registerLimiter = createLimiter(
-    5, 60 * 60, "register",
+    100, 60, "register",
     "Too many registration attempts. Please try again after an hour."
 );
 
-// 10 login attempts per 15 minutes per IP
+// DEV: 100 login attempts per minute  (was: 10 / 15 min)
 export const loginLimiter = createLimiter(
-    10, 15 * 60, "login",
+    100, 60, "login",
     "Too many login attempts. Please try again after 15 minutes."
 );
 
-// 5 password reset requests per hour — prevents email flooding
+// DEV: 100 password reset requests per minute  (was: 5 / hour)
 export const forgotPasswordLimiter = createLimiter(
-    5, 60 * 60, "forgot-password",
+    100, 60, "forgot-password",
     "Too many password reset requests. Please try again after an hour."
 );
 
-// 5 OTP attempts per 15 minutes — prevents brute forcing the 6-digit code
+// DEV: 100 OTP attempts per minute  (was: 5 / 15 min)
 export const verifyOtpLimiter = createLimiter(
-    5, 15 * 60, "verify-otp",
+    100, 60, "verify-otp",
     "Too many OTP attempts. Please request a new OTP."
 );
 
-// 60 requests per minute for public API proxy endpoints — prevents hammering external APIs
+// DEV: 500 requests per minute for public API proxy endpoints  (was: 60 / min)
 export const publicApiLimiter = createLimiter(
-    60, 60, "public-api",
+    500, 60, "public-api",
     "Too many public API requests. Please try again after a minute."
 );
 
+// DEV: 100 password change attempts per minute  (was: 5 / hour)
 export const changePasswordLimiter = createLimiter(
-    5, 60 * 60, "change-password",
+    100, 60, "change-password",
     "Too many password change attempts. Please try again after an hour."
 );
 
+// DEV: 200 token refresh attempts per minute  (was: 20 / 15 min)
 export const refreshTokenLimiter = createLimiter(
-    20, 15 * 60, "refresh-token",
+    200, 60, "refresh-token",
     "Too many token refresh attempts. Please try again after 15 minutes."
 );
 
@@ -81,7 +85,7 @@ export const refreshTokenLimiter = createLimiter(
 export const payoutUserLimiter = (redisClient) =>
     rateLimit({
         windowMs:        60 * 1000,  // 1 minute window
-        max:             10,          // 10 payout requests per minute per user
+        max:             100,         // DEV: 100 payout requests per minute per user  (was: 10)
         standardHeaders: true,
         legacyHeaders:   false,
         // Key by userId so the limit is per-user, not per-IP
